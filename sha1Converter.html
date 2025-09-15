@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>sha1 Hash function</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha1/0.6.0/sha1.min.js">
+
+    </script>
+</head>
+
+<body>
+    <h1>SHA1 Converter</h1>
+
+    <p id="pId"></p>
+    <div class="input">
+        <label for="value">Enter text to hash:</label>
+        <input type="text" id="value" />
+        <button onclick="convertToSHA1()">Convert</button>
+    </div>
+    <label for="result">Result:
+        <p id="result"></p>
+    </label>
+
+    <!-- Script to return math property values -->
+    <script>
+        function convertToSHA1() {
+            var input = document.getElementById("value").value;
+            var hash = sha1(input);
+            document.getElementById("result").innerText = hash;
+        }
+
+        // var myString = "hello world";
+        // var text = sha1(myString);
+        // document.getElementById("pId").innerHTML = myString + " : " + text;
+        // var myString2 = "GeeksForGeeks";
+        // var text2 = sha1(myString2);
+        // document.getElementById("pId2").innerHTML = myString2 + " : " + text2;            
+    </script>
+</body>
+
+</html>
