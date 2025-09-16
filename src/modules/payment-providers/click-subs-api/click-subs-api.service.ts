@@ -24,9 +24,9 @@ export class ClickSubsApiService {
     private readonly secretKey = process.env.CLICK_SECRET;
     private readonly merchantUserId = process.env.CLICK_MERCHANT_USER_ID;
     private readonly baseUrls = [
-        'https://api.click.uz/v2',                    // Asosiy API server  
-        'https://my.click.uz/v2',                     // Alternative server
-        'https://merchant.click.uz/v2',               // Merchant server
+        'https://api.click.uz/v2/card_token',         // Asosiy API server  
+        'https://my.click.uz/v2/card_token',          // Alternative server
+        'https://merchant.click.uz/v2/card_token',    // Merchant server
     ];
 
     constructor() {
@@ -50,7 +50,7 @@ export class ClickSubsApiService {
 
     // Development uchun mock response
     private createMockResponse(endpoint: string) {
-        if (endpoint === '/card_token/request') {
+        if (endpoint === '/request') {
             return {
                 data: {
                     error_code: 0,
@@ -61,7 +61,7 @@ export class ClickSubsApiService {
             };
         }
 
-        if (endpoint === '/card_token/verify') {
+        if (endpoint === '/verify') {
             return {
                 data: {
                     error_code: 0,
@@ -71,7 +71,7 @@ export class ClickSubsApiService {
             };
         }
 
-        if (endpoint === '/card_token/payment') {
+        if (endpoint === '/payment') {
             return {
                 data: {
                     error_code: 0,
@@ -383,7 +383,7 @@ export class ClickSubsApiService {
             console.log('Request data:', requestBodyWithServiceId);
 
             const response = await this.retryWithMultipleUrls(
-                '/card_token/request',
+                '/request',
                 requestBodyWithServiceId,
                 headers,
                 30000
@@ -438,7 +438,7 @@ export class ClickSubsApiService {
 
         try {
             const response = await this.retryWithMultipleUrls(
-                '/card_token/verify',
+                '/verify',
                 requestBodyWithServiceId,
                 headers,
                 30000
@@ -579,7 +579,7 @@ export class ClickSubsApiService {
 
         try {
             const response = await this.retryWithMultipleUrls(
-                '/card_token/payment',
+                '/payment',
                 payload,
                 headers,
                 30000
