@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import * as crypto from 'crypto'; // 1. crypto moduli import qilindi
 import { Plan } from 'src/shared/database/models/plans.model';
-import { PaymentProvider, PaymentTypes, Transaction, TransactionStatus } from 'src/shared/database/models/transactions.model';
+import { PaymentProvider, Transaction, TransactionStatus } from 'src/shared/database/models/transactions.model';
 import { CardType, UserCardsModel } from 'src/shared/database/models/user-cards.model';
 import { UserSubscription } from 'src/shared/database/models/user-subscription.model';
 import logger from 'src/shared/utils/logger';
@@ -25,7 +25,58 @@ export class ClickSubsApiService {
     private readonly merchantUserId = process.env.CLICK_MERCHANT_USER_ID;
     private readonly baseUrl = 'https://api.click.uz/v2/merchant';
 
-    constructor() { }
+    constructor() {
+        // Environment variables tekshirish
+        if (!this.serviceId) {
+            throw new Error('CLICK_SERVICE_ID environment variable is required');
+        }
+        if (!this.secretKey) {
+            throw new Error('CLICK_SECRET environment variable is required');
+        }
+        if (!this.merchantUserId) {
+            throw new Error('CLICK_MERCHANT_USER_ID environment variable is required');
+        }
+        if (!this.merchantId) {
+            throw new Error('CLICK_MERCHANT_ID environment variable is required');
+        }
+
+        logger.info('ClickSubsApiService initialized successfully');
+    }
+
+    // Retry funksiyasi
+    private async retryRequest<T>(
+        requestFn: () => Promise<T>,
+        maxRetries: number = 3,
+        delay: number = 2000
+    ): Promise<T> {
+        let lastError: any;
+
+        for (let i = 0; i <= maxRetries; i++) {
+            try {
+                return await requestFn();
+            } catch (error: any) {
+                lastError = error;
+
+                if (i === maxRetries) {
+                    break;
+                }
+
+                // Faqat timeout yoki server errorlarda retry qilish
+                if (error.code === 'ECONNABORTED' ||
+                    error.response?.status === 504 ||
+                    error.response?.status === 502 ||
+                    error.response?.status === 503) {
+                    logger.warn(`Retry attempt ${i + 1}/${maxRetries} after ${delay}ms`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 1.5; // Exponential backoff
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        throw lastError;
+    }
 
     private createSignature(dto: ClickPrepareDto | ClickCompleteDto): string {
         const {
@@ -255,6 +306,7 @@ export class ClickSubsApiService {
         if (!this.serviceId) {
             throw new Error('Service ID is not defined');
         }
+
         const requestBodyWithServiceId: RequestBody = {
             service_id: this.serviceId,
             card_number: requestBody.card_number,
@@ -264,27 +316,43 @@ export class ClickSubsApiService {
 
         try {
             console.log('Request data:', requestBodyWithServiceId);
-            const response = await axios.post(
-                `${this.baseUrl}/card_token/request`,
-                requestBodyWithServiceId,
-                { headers },
-            );
+
+            const response = await this.retryRequest(async () => {
+                return await axios.post(
+                    `${this.baseUrl}/card_token/request`,
+                    requestBodyWithServiceId,
+                    {
+                        headers,
+                        timeout: 30000, // 30 sekund timeout
+                    }
+                );
+            }, 3, 2000);
 
             console.log('Received response data:', response.data);
 
             if (response.data.error_code !== 0) {
-                throw new Error('Response error code is not 0');
+                throw new Error(`Click API error: ${response.data.error_note || 'Unknown error'}`);
             }
-            const result: CreateCardTokenResponseDto = new CreateCardTokenResponseDto();
 
+            const result: CreateCardTokenResponseDto = new CreateCardTokenResponseDto();
             result.token = response.data.card_token;
             result.incompletePhoneNumber = response.data.phone_number;
 
             return result;
-        } catch (error) {
-            // Handle errors appropriately
+        } catch (error: any) {
             console.error('Error creating card token:', error);
-            throw error;
+
+            // Click API muammosi bo'lsa, foydalanuvchiga tushunarli xabar
+            if (error.code === 'ECONNABORTED' || error.response?.status === 504) {
+                logger.error('Click API timeout or 504 error');
+                throw new Error('Click to\'lov tizimi vaqtincha ishlamayapti. Iltimos, keyinroq qayta urinib ko\'ring.');
+            }
+
+            if (error.response?.status === 401) {
+                throw new Error('Click API autentifikatsiya xatoligi');
+            }
+
+            throw new Error(`Click API xatoligi: ${error.message}`);
         }
     }
 
@@ -308,11 +376,16 @@ export class ClickSubsApiService {
         };
 
         try {
-            const response = await axios.post(
-                `${this.baseUrl}/card_token/verify`, // Changed endpoint to verify
-                requestBodyWithServiceId,
-                { headers },
-            );
+            const response = await this.retryRequest(async () => {
+                return await axios.post(
+                    `${this.baseUrl}/card_token/verify`,
+                    requestBodyWithServiceId,
+                    {
+                        headers,
+                        timeout: 30000,
+                    }
+                );
+            }, 3, 2000);
 
             if (response.data.error_code !== 0) {
                 throw new Error(`Verification failed: ${response.data.error_message || 'Unknown error'}`);
@@ -389,7 +462,7 @@ export class ClickSubsApiService {
                 }
 
             }
-            user.subscriptionType = 'subscription'
+            user.subscriptionType = 'subscription';
             await user.save();
 
 
@@ -397,7 +470,7 @@ export class ClickSubsApiService {
                 logger.info(`Auto subscription success for user: ${user.telegramId}`);
             }
             return successResult;
-        } catch (error) {
+        } catch (error: any) {
             // Handle errors appropriately
             console.error('Error verifying card token:', error);
             throw error;
@@ -448,11 +521,16 @@ export class ClickSubsApiService {
         };
 
         try {
-            const response = await axios.post(
-                `${this.baseUrl}/card_token/payment`,
-                payload,
-                { headers },
-            );
+            const response = await this.retryRequest(async () => {
+                return await axios.post(
+                    `${this.baseUrl}/card_token/payment`,
+                    payload,
+                    {
+                        headers,
+                        timeout: 30000,
+                    }
+                );
+            }, 3, 2000);
 
             const { error_code, payment_id } = response.data;
 
@@ -504,7 +582,7 @@ export class ClickSubsApiService {
             }
 
             return { success: true };
-        } catch (error) {
+        } catch (error: any) {
             transaction.status = TransactionStatus.FAILED;
             await transaction.save();
             logger.error('Error during payment with token:', error);

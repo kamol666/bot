@@ -1,0 +1,14 @@
+# Click API test
+GET https://api.click.uz/v2/merchant
+Content-Type: application/json
+
+###
+
+# Click API ping test
+GET https://api.click.uz
+Content-Type: application/json
+
+###
+
+# Local server test
+GET http://192.168.9.180:3003/click/invoice-status/12345
