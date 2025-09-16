@@ -53,6 +53,10 @@ export class ClickSubsApiService {
 
         logger.info('ClickSubsApiService initialized successfully');
         logger.info(`Development mode: ${process.env.NODE_ENV !== 'production'}`);
+        logger.info(`EPS ID configured: ${this.epsId ? 'Yes' : 'No'}`);
+        if (this.epsId) {
+            logger.info(`EPS ID value: ${this.epsId}`);
+        }
     }
 
     // Development uchun mock response
@@ -459,6 +463,10 @@ export class ClickSubsApiService {
             ...(this.epsId ? { eps_id: this.epsId } : {}),
         };
 
+        // Debug logging uchun payload ni ko'rsatish
+        logger.info(`Click verify request payload: ${JSON.stringify(requestBodyWithServiceId)}`);
+        logger.info(`Click verify headers: ${JSON.stringify(headers)}`);
+
         try {
             const response = await this.retryWithMultipleUrls(
                 '/verify',
@@ -470,6 +478,16 @@ export class ClickSubsApiService {
             const { error_code, error_note } = response.data || {};
             if (error_code !== 0) {
                 logger.error(`Click verify failed: code=${error_code}, note=${error_note}, body=${JSON.stringify(response.data)}`);
+
+                // -500 xatoligi uchun maxsus xabar
+                if (error_code === -500) {
+                    if (!this.epsId) {
+                        throw new Error('Click API -500 xatoligi: EPS ID talab qilinadi. Administrator bilan bog\'laning.');
+                    } else {
+                        throw new Error('Click API -500 xatoligi: Merchant konfiguratsiyasi noto\'g\'ri. Administrator bilan bog\'laning.');
+                    }
+                }
+
                 // Common Click error codes handling
                 if (error_code === -5004) {
                     throw new Error('SMS kod noto\'g\'ri yoki eskirgan. Iltimos, yangisini kiriting.');
@@ -480,7 +498,7 @@ export class ClickSubsApiService {
                 if (error_code === -5019) {
                     throw new Error('Kartani tasdiqlash uchun limitga erishildi. Keyinroq urinib ko\'ring.');
                 }
-                throw new Error(`Verification failed: ${error_note || 'Unknown error'}`);
+                throw new Error(`Tasdiqlash xatoligi: ${error_note || 'Noma\'lum xatolik'}`);
             }
 
             const user = await UserModel.findOne({
