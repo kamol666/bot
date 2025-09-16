@@ -51,6 +51,11 @@ export class ClickSubsApiController {
     return await this.clickSubsApiService.createCardtoken(requestBody);
   }
 
+  @Post('/resend-sms-code')
+  async resendSmsCode(@Body() requestBody: { card_token: string }) {
+    return await this.clickSubsApiService.resendSmsCode(requestBody.card_token);
+  }
+
   @Post('/verify-card-token/')
   async verifyCardToken(@Body() requestBody: VerifyCardTokenDto) {
     return await this.clickSubsApiService.verifyCardToken(requestBody);

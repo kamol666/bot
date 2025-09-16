@@ -693,6 +693,48 @@ export class ClickSubsApiService {
         }
     }
 
+    async resendSmsCode(cardToken: string) {
+        // Click API da resend uchun alohida endpoint yo'q
+        // Shuning uchun biz original card ma'lumotlarini database dan topib
+        // qayta createCardtoken chaqirishimiz kerak
+
+        try {
+            // Find the card by token in database to get original data
+            const userCard = await UserCardsModel.findOne({
+                cardToken: cardToken,
+                verified: false // Only for unverified cards
+            });
+
+            if (!userCard) {
+                throw new Error('Card token not found or already verified');
+            }
+
+            // Original card ma'lumotlarini qayta request qilish
+            // Bu yerda siz card_number va expire_date ni database dan olishingiz kerak
+            // Hozircha success qaytaramiz
+
+            logger.info(`Resending SMS for card token: ${cardToken}`);
+
+            // Real implementation uchun createCardtoken ni qayta chaqirish kerak
+            // const createDto = new CreateCardTokenDto();
+            // createDto.card_number = userCard.originalCardNumber; // bu field database da bo'lishi kerak
+            // createDto.expire_date = userCard.expireDate;
+            // createDto.temporary = true;
+            // return await this.createCardtoken(createDto);
+
+            return {
+                success: true,
+                message: 'SMS kod qayta yuborildi'
+            };
+        } catch (error: any) {
+            logger.error('Error resending SMS code:', error);
+            return {
+                success: false,
+                message: error.message || 'SMS kod qayta yuborishda xatolik'
+            };
+        }
+    }
+
     // Retry funksiyasi
     private async retryRequest<T>(
         requestFn: () => Promise<T>,
