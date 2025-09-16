@@ -23,7 +23,11 @@ export class ClickSubsApiService {
     private readonly merchantId = process.env.CLICK_MERCHANT_ID;
     private readonly secretKey = process.env.CLICK_SECRET;
     private readonly merchantUserId = process.env.CLICK_MERCHANT_USER_ID;
-    private readonly baseUrl = 'https://api.click.uz/v2/merchant';
+    private readonly baseUrls = [
+        'https://api.click.uz/v2/merchant',
+        'https://api.click.uz/v2/merchant',  // Backup URL (hozircha bir xil)
+        'https://merchant.click.uz/v2/merchant'  // Alternative domain
+    ];
 
     constructor() {
         // Environment variables tekshirish
@@ -43,38 +47,48 @@ export class ClickSubsApiService {
         logger.info('ClickSubsApiService initialized successfully');
     }
 
-    // Retry funksiyasi
-    private async retryRequest<T>(
-        requestFn: () => Promise<T>,
-        maxRetries: number = 3,
-        delay: number = 2000
-    ): Promise<T> {
+    // Multiple URL bilan retry funksiyasi
+    private async retryWithMultipleUrls<T>(
+        endpoint: string,
+        requestData: any,
+        headers: any,
+        timeout: number = 30000
+    ): Promise<any> {
         let lastError: any;
 
-        for (let i = 0; i <= maxRetries; i++) {
+        for (let urlIndex = 0; urlIndex < this.baseUrls.length; urlIndex++) {
+            const baseUrl = this.baseUrls[urlIndex];
+
             try {
-                return await requestFn();
+                logger.info(`Trying URL ${urlIndex + 1}/${this.baseUrls.length}: ${baseUrl}`);
+
+                const response = await this.retryRequest(async () => {
+                    return await axios.post(
+                        `${baseUrl}${endpoint}`,
+                        requestData,
+                        {
+                            headers,
+                            timeout,
+                        }
+                    );
+                }, 2, 1000); // Har bir URL uchun 2 marta urinish
+
+                logger.info(`Success with URL: ${baseUrl}`);
+                return response;
+
             } catch (error: any) {
                 lastError = error;
+                logger.warn(`Failed with URL ${baseUrl}: ${error.message}`);
 
-                if (i === maxRetries) {
-                    break;
-                }
-
-                // Faqat timeout yoki server errorlarda retry qilish
-                if (error.code === 'ECONNABORTED' ||
-                    error.response?.status === 504 ||
-                    error.response?.status === 502 ||
-                    error.response?.status === 503) {
-                    logger.warn(`Retry attempt ${i + 1}/${maxRetries} after ${delay}ms`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    delay *= 1.5; // Exponential backoff
-                } else {
-                    throw error;
+                // Agar bu oxirgi URL bo'lmasa, keyingisini sinab ko'ramiz
+                if (urlIndex < this.baseUrls.length - 1) {
+                    logger.info(`Trying next URL...`);
+                    continue;
                 }
             }
         }
 
+        // Barcha URL'lar ishlamasa, oxirgi xatolikni qaytaramiz
         throw lastError;
     }
 
@@ -317,16 +331,12 @@ export class ClickSubsApiService {
         try {
             console.log('Request data:', requestBodyWithServiceId);
 
-            const response = await this.retryRequest(async () => {
-                return await axios.post(
-                    `${this.baseUrl}/card_token/request`,
-                    requestBodyWithServiceId,
-                    {
-                        headers,
-                        timeout: 30000, // 30 sekund timeout
-                    }
-                );
-            }, 3, 2000);
+            const response = await this.retryWithMultipleUrls(
+                '/card_token/request',
+                requestBodyWithServiceId,
+                headers,
+                30000
+            );
 
             console.log('Received response data:', response.data);
 
@@ -376,16 +386,12 @@ export class ClickSubsApiService {
         };
 
         try {
-            const response = await this.retryRequest(async () => {
-                return await axios.post(
-                    `${this.baseUrl}/card_token/verify`,
-                    requestBodyWithServiceId,
-                    {
-                        headers,
-                        timeout: 30000,
-                    }
-                );
-            }, 3, 2000);
+            const response = await this.retryWithMultipleUrls(
+                '/card_token/verify',
+                requestBodyWithServiceId,
+                headers,
+                30000
+            );
 
             if (response.data.error_code !== 0) {
                 throw new Error(`Verification failed: ${response.data.error_message || 'Unknown error'}`);
@@ -521,16 +527,12 @@ export class ClickSubsApiService {
         };
 
         try {
-            const response = await this.retryRequest(async () => {
-                return await axios.post(
-                    `${this.baseUrl}/card_token/payment`,
-                    payload,
-                    {
-                        headers,
-                        timeout: 30000,
-                    }
-                );
-            }, 3, 2000);
+            const response = await this.retryWithMultipleUrls(
+                '/card_token/payment',
+                payload,
+                headers,
+                30000
+            );
 
             const { error_code, payment_id } = response.data;
 
@@ -590,4 +592,38 @@ export class ClickSubsApiService {
         }
     }
 
+    // Retry funksiyasi
+    private async retryRequest<T>(
+        requestFn: () => Promise<T>,
+        maxRetries: number = 3,
+        delay: number = 2000
+    ): Promise<T> {
+        let lastError: any;
+
+        for (let i = 0; i <= maxRetries; i++) {
+            try {
+                return await requestFn();
+            } catch (error: any) {
+                lastError = error;
+
+                if (i === maxRetries) {
+                    break;
+                }
+
+                // Faqat timeout yoki server errorlarda retry qilish
+                if (error.code === 'ECONNABORTED' ||
+                    error.response?.status === 504 ||
+                    error.response?.status === 502 ||
+                    error.response?.status === 503) {
+                    logger.warn(`Retry attempt ${i + 1}/${maxRetries} after ${delay}ms`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 1.5; // Exponential backoff
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        throw lastError;
+    }
 }
