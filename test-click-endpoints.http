@@ -1,0 +1,75 @@
+### Test Click API Alternative Endpoints
+### 1. Asosiy API server - api.click.uz
+POST https://api.click.uz/v2/merchant/card_token/request
+Content-Type: application/json
+
+{
+    "service_id": "{{CLICK_SERVICE_ID}}",
+    "merchant_id": "{{CLICK_MERCHANT_ID}}",
+    "card_number": "8600495473316478",
+    "expire_date": "0399",
+    "temporary": 0
+}
+
+###
+
+### 2. Personal cabinet API - my.click.uz
+POST https://my.click.uz/services/pay/card_token/request
+Content-Type: application/json
+
+{
+    "service_id": "{{CLICK_SERVICE_ID}}",
+    "merchant_id": "{{CLICK_MERCHANT_ID}}",
+    "card_number": "8600495473316478",
+    "expire_date": "0399",
+    "temporary": 0
+}
+
+###
+
+### 3. Merchant portal API - merchant.click.uz
+POST https://merchant.click.uz/api/v2/card_token/request
+Content-Type: application/json
+
+{
+    "service_id": "{{CLICK_SERVICE_ID}}",
+    "merchant_id": "{{CLICK_MERCHANT_ID}}",
+    "card_number": "8600495473316478",
+    "expire_date": "0399",
+    "temporary": 0
+}
+
+###
+
+### 4. Payment gateway API - payment.click.uz
+POST https://payment.click.uz/v2/merchant/card_token/request
+Content-Type: application/json
+
+{
+    "service_id": "{{CLICK_SERVICE_ID}}",
+    "merchant_id": "{{CLICK_MERCHANT_ID}}",
+    "card_number": "8600495473316478",
+    "expire_date": "0399",
+    "temporary": 0
+}
+
+###
+
+### Test health check barcha serverlar uchun
+GET https://api.click.uz/health
+Accept: application/json
+
+###
+
+GET https://my.click.uz/health
+Accept: application/json
+
+###
+
+GET https://merchant.click.uz/health
+Accept: application/json
+
+###
+
+GET https://payment.click.uz/health
+Accept: application/json
