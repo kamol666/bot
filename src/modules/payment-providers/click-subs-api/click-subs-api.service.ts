@@ -33,6 +33,8 @@ export class ClickSubsApiService {
         // merchant.click.uz uses "/api/v2/card_token"
         'https://merchant.click.uz/api/v2/card_token',
     ];
+    // Optional EPS ID if Click requires it for your merchant
+    private readonly epsId = process.env.CLICK_EPS_ID;
 
     constructor() {
         // Environment variables tekshirish
@@ -373,9 +375,12 @@ export class ClickSubsApiService {
 
         interface RequestBody {
             service_id: string;
+            merchant_id: string;
             card_number: string;
             expire_date: string;
             temporary: boolean;
+            // optional
+            eps_id?: string;
         }
 
         if (!this.serviceId) {
@@ -384,9 +389,12 @@ export class ClickSubsApiService {
 
         const requestBodyWithServiceId: RequestBody = {
             service_id: this.serviceId,
+            merchant_id: this.merchantId,
             card_number: requestBody.card_number,
             expire_date: requestBody.expire_date,
             temporary: requestBody.temporary,
+            // include eps_id only if provided
+            ...(this.epsId ? { eps_id: this.epsId } : {}),
         };
 
         try {
@@ -432,8 +440,11 @@ export class ClickSubsApiService {
 
         interface RequestBody {
             service_id: string;
+            merchant_id: string;
             card_token: string;
             sms_code: string; // must be string, Click may send leading zeros
+            // optional
+            eps_id?: string;
         }
 
         if (!this.serviceId) {
@@ -442,8 +453,10 @@ export class ClickSubsApiService {
 
         const requestBodyWithServiceId: RequestBody = {
             service_id: this.serviceId,
+            merchant_id: this.merchantId,
             card_token: requestBody.card_token,
             sms_code: String(requestBody.sms_code),
+            ...(this.epsId ? { eps_id: this.epsId } : {}),
         };
 
         try {
@@ -589,9 +602,11 @@ export class ClickSubsApiService {
 
         const payload = {
             service_id: this.serviceId,
+            merchant_id: this.merchantId,
             card_token: userCard.cardToken,
             amount: plan.price.toString(),
             transaction_parameter: transaction._id.toString(),
+            ...(this.epsId ? { eps_id: this.epsId } : {}),
         };
 
         try {
