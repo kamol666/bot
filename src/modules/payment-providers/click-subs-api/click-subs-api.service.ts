@@ -24,9 +24,14 @@ export class ClickSubsApiService {
     private readonly secretKey = process.env.CLICK_SECRET;
     private readonly merchantUserId = process.env.CLICK_MERCHANT_USER_ID;
     private readonly baseUrls = [
-        'https://api.click.uz/v2/card_token',         // Asosiy API server  
-        'https://my.click.uz/v2/card_token',          // Alternative server
-        'https://merchant.click.uz/v2/card_token',    // Merchant server
+        // Correct base paths for different Click API hosts
+        // api.click.uz and payment.click.uz use "/v2/merchant/card_token"
+        'https://api.click.uz/v2/merchant/card_token',
+        'https://payment.click.uz/v2/merchant/card_token',
+        // my.click.uz uses "/services/pay/card_token"
+        'https://my.click.uz/services/pay/card_token',
+        // merchant.click.uz uses "/api/v2/card_token"
+        'https://merchant.click.uz/api/v2/card_token',
     ];
 
     constructor() {
@@ -123,7 +128,12 @@ export class ClickSubsApiService {
 
             } catch (error: any) {
                 lastError = error;
-                logger.warn(`Failed with URL ${baseUrl}: ${error.message}`);
+                const status = error?.response?.status;
+                const body = error?.response?.data;
+                logger.warn(`Failed with URL ${baseUrl}: ${error.message} ${status ? `(status ${status})` : ''}`);
+                if (body) {
+                    logger.warn(`Response body: ${typeof body === 'string' ? body : JSON.stringify(body)}`);
+                }
 
                 // Agar bu oxirgi URL bo'lmasa, keyingisini sinab ko'ramiz
                 if (urlIndex < this.baseUrls.length - 1) {
