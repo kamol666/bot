@@ -433,7 +433,7 @@ export class ClickSubsApiService {
         interface RequestBody {
             service_id: string;
             card_token: string;
-            sms_code: number;
+            sms_code: string; // must be string, Click may send leading zeros
         }
 
         if (!this.serviceId) {
@@ -443,7 +443,7 @@ export class ClickSubsApiService {
         const requestBodyWithServiceId: RequestBody = {
             service_id: this.serviceId,
             card_token: requestBody.card_token,
-            sms_code: requestBody.sms_code,
+            sms_code: String(requestBody.sms_code),
         };
 
         try {
@@ -454,8 +454,20 @@ export class ClickSubsApiService {
                 30000
             );
 
-            if (response.data.error_code !== 0) {
-                throw new Error(`Verification failed: ${response.data.error_message || 'Unknown error'}`);
+            const { error_code, error_note } = response.data || {};
+            if (error_code !== 0) {
+                logger.error(`Click verify failed: code=${error_code}, note=${error_note}, body=${JSON.stringify(response.data)}`);
+                // Common Click error codes handling
+                if (error_code === -5004) {
+                    throw new Error('SMS kod noto\'g\'ri yoki eskirgan. Iltimos, yangisini kiriting.');
+                }
+                if (error_code === -5005) {
+                    throw new Error('SMS kod muddati tugagan. Iltimos, qayta urinib ko\'ring.');
+                }
+                if (error_code === -5019) {
+                    throw new Error('Kartani tasdiqlash uchun limitga erishildi. Keyinroq urinib ko\'ring.');
+                }
+                throw new Error(`Verification failed: ${error_note || 'Unknown error'}`);
             }
 
             const user = await UserModel.findOne({
@@ -516,14 +528,6 @@ export class ClickSubsApiService {
             const successResult = response.data;
             if (user.hasReceivedFreeBonus) {
                 if (requestBody.selectedService === 'yulduz') {
-                    // await this.botService.handleCardAddedWithoutBonus(
-                    //     requestBody.userId,
-                    //     user.telegramId,
-                    //     CardType.PAYME,
-                    //     plan,
-                    //     user.username,
-                    //     requestBody.selectedService
-                    // );
                     logger.info(`Card added without bonus for user: ${user.telegramId}`);
                     return successResult;
                 }
@@ -540,6 +544,9 @@ export class ClickSubsApiService {
         } catch (error: any) {
             // Handle errors appropriately
             console.error('Error verifying card token:', error);
+            if (error.response) {
+                logger.error(`Verify HTTP ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+            }
             throw error;
         }
     }

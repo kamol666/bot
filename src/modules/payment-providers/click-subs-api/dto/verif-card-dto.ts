@@ -6,7 +6,7 @@ export class VerifyCardTokenDto {
     card_token: string;
 
     @IsNotEmpty()
-    sms_code: number;
+    sms_code: string; // string to preserve leading zeros
 
     @IsNotEmpty()
     userId: string;
