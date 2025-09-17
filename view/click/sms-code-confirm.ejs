@@ -7,7 +7,7 @@
     <meta name="viewport"
         content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>SMS Verification | Click Payment</title>
+    <title>SMS Tasdiqlash | Click To'lov</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -195,19 +195,19 @@
                     </defs>
                 </svg>
             </div>
-            <h1>SMS Verification</h1>
+            <h1>SMS Tasdiqlash</h1>
             <p><span id="phoneNumber">+998 ** *** 4567</span> raqamiga yuborilgan SMS kodni kiriting</p>
         </div>
 
         <form id="smsForm">
             <div class="form-group">
-                <label for="smsCode">Tasdiqlsh kodi</label>
-                <input type="text" id="smsCode" placeholder="Enter code" maxlength="6" inputmode="numeric"
+                <label for="smsCode">Tasdiqlash kodi</label>
+                <input type="text" id="smsCode" placeholder="Kod kiriting" maxlength="6" inputmode="numeric"
                     pattern="[0-9 ]*">
-                <div class="error" id="smsError">Tasdiqlash kodi to'g'ri kiritilmadi</div>
+                <div class="error" id="smsError">Tasdiqlash kodi noto'g'ri kiritildi</div>
             </div>
 
-            <div class="timer" id="timer">Code will expire in <span id="countdown">01:00</span></div>
+            <div class="timer" id="timer">Kod muddati tugaydi: <span id="countdown">01:00</span></div>
 
             <div class="form-group">
                 <button type="submit" id="verifyBtn">Tasdiqlash</button>
@@ -215,7 +215,7 @@
         </form>
 
         <div class="resend disabled" id="resendContainer">
-            <a id="resendLink">Resend Code</a>
+            <a id="resendLink">Kod qayta yuborish</a>
         </div>
 
         <div class="footer">
@@ -246,7 +246,7 @@
             });
 
             // Countdown timer
-            let timeLeft = 60; // 1 minute (changed from 2 minutes)
+            let timeLeft = 60; // 1 daqiqa
             const countdownEl = document.getElementById('countdown');
             const resendContainer = document.getElementById('resendContainer');
 
@@ -260,7 +260,7 @@
 
                 if (timeLeft <= 0) {
                     clearInterval(countdownTimer);
-                    document.getElementById('timer').textContent = 'Code has expired';
+                    document.getElementById('timer').textContent = 'Kod muddati tugadi';
                     resendContainer.classList.remove('disabled');
                 }
             }, 1000);
@@ -294,7 +294,7 @@
                         // Reset timer on successful resend
                         timeLeft = 60;
                         countdownEl.textContent = '01:00';
-                        document.getElementById('timer').innerHTML = 'Code will expire in <span id="countdown">01:00</span>';
+                        document.getElementById('timer').innerHTML = 'Kod muddati tugaydi: <span id="countdown">01:00</span>';
 
                         // Restart countdown
                         clearInterval(countdownTimer);
@@ -308,7 +308,7 @@
 
                             if (timeLeft <= 0) {
                                 clearInterval(newCountdown);
-                                document.getElementById('timer').textContent = 'Code has expired';
+                                document.getElementById('timer').textContent = 'Kod muddati tugadi';
                                 resendContainer.classList.remove('disabled');
                             }
                         }, 1000);
@@ -328,7 +328,7 @@
                 }
 
                 // Reset button text
-                resendLink.textContent = 'Resend Code';
+                resendLink.textContent = 'Kod qayta yuborish';
             });
 
             // Form submission
@@ -351,7 +351,7 @@
                 // Disable button during processing
                 const verifyBtn = document.getElementById('verifyBtn');
                 verifyBtn.disabled = true;
-                verifyBtn.textContent = 'Processing...';
+                verifyBtn.textContent = 'Tekshirilmoqda...';
 
                 try {
                     // Prepare request data
@@ -378,37 +378,37 @@
                         // Show success message and button
                         const footer = document.querySelector('.footer');
                         footer.innerHTML = `
-    <div style="margin-top: 30px; text-align: center;">
-        <a href="https://t.me/sportsuz_premium_bot" target="_blank"
-           style="
-               display: inline-block;
-               background-color: #28a745;
-               color: white;
-               padding: 16px 32px;
-               font-size: 18px;
-               border-radius: 8px;
-               font-weight: 700;
-               text-decoration: none;
-               box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-               transition: background-color 0.3s ease, transform 0.2s ease;
-           "
-           onmouseover="this.style.backgroundColor='#218838'; this.style.transform='scale(1.05)'"
-           onmouseout="this.style.backgroundColor='#28a745'; this.style.transform='scale(1)'"
-        >
-            Premium Botga o'tish
-        </a>
-    </div>
+<div style="margin-top: 30px; text-align: center;">
+    <a href="https://t.me/sportsuz_premium_bot" target="_blank"
+       style="
+           display: inline-block;
+           background-color: #28a745;
+           color: white;
+           padding: 16px 32px;
+           font-size: 18px;
+           border-radius: 8px;
+           font-weight: 700;
+           text-decoration: none;
+           box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+           transition: background-color 0.3s ease, transform 0.2s ease;
+       "
+       onmouseover="this.style.backgroundColor='#218838'; this.style.transform='scale(1.05)'"
+       onmouseout="this.style.backgroundColor='#28a745'; this.style.transform='scale(1)'"
+    >
+        Premium Botga o'tish
+    </a>
+</div>
 `;
 
                         // Optional: hide form
                         document.getElementById('smsForm').style.display = 'none';
                     } else {
-                        throw new Error('Failed to verify card token');
+                        throw new Error('Tasdiqlash kodi tekshirishda xatolik');
                     }
                 } catch (error) {
-                    console.error('Error:', error);
+                    console.error('Xatolik:', error);
                     // Show error message to user
-                    document.getElementById('smsError').textContent = 'Verification failed. Please try again.';
+                    document.getElementById('smsError').textContent = 'Tasdiqlash muvaffaqiyatsiz. Iltimos, qayta urinib ko‘ring.';
                     document.getElementById('smsError').style.display = 'block';
 
                     // Reset button state
