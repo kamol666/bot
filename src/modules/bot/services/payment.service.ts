@@ -1,16 +1,22 @@
 import { PaymeSubsApiService } from "src/modules/payment-providers/payme-subs-api/payme-subs-api.service";
-import {Injectable} from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { UzCardApiService } from "src/modules/payment-providers/uzcard/uzcard.service";
 import { PaymentCardTokenDto } from "src/shared/utils/types/interfaces/payme-types";
 import { ClickSubsApiService } from "src/modules/payment-providers/click-subs-api/click-subs-api.service";
+import { ConfigService } from "@nestjs/config";
 
 
 @Injectable()
 export class PaymentService {
 
-    private readonly clickSubsApiService = new ClickSubsApiService();
-    private readonly paymeSubsApiService = new PaymeSubsApiService();
+    private readonly clickSubsApiService: ClickSubsApiService;
+    private readonly paymeSubsApiService: PaymeSubsApiService;
     // private readonly uzCardApiService = new UzCardApiService();
+
+    constructor(private readonly configService: ConfigService) {
+        this.clickSubsApiService = new ClickSubsApiService(this.configService);
+        this.paymeSubsApiService = new PaymeSubsApiService();
+    }
 
 
     async paymentWithClickSubsApi(requestBody: PaymentCardTokenDto) {

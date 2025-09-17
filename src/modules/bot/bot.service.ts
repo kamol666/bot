@@ -18,6 +18,7 @@ import { FlowStepType, SubscriptionFlowTracker } from 'src/shared/database/model
 import { ClickService } from '../payment-providers/click/click.service';
 import { ConfigService } from '@nestjs/config';
 import { Transaction, TransactionStatus } from '../../shared/database/models/transactions.model';
+import { PaymentService } from './services/payment.service';
 
 interface SessionData {
   pendingSubscription?: {
@@ -46,9 +47,12 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly clickService: ClickService,  // ✅ DI orqali inject qilish
+    private readonly configService: ConfigService, // ✅ ConfigService qo'shish
   ) {
     this.bot = new Bot<BotContext>(config.BOT_TOKEN);
-    this.subscriptionService = new SubscriptionService(this.bot);
+    // PaymentService yaratish
+    const paymentService = new PaymentService(this.configService);
+    this.subscriptionService = new SubscriptionService(this.bot, paymentService);
     this.subscriptionMonitorService = new SubscriptionMonitorService(this.bot);
     this.subscriptionChecker = new SubscriptionChecker(
       this.subscriptionMonitorService,

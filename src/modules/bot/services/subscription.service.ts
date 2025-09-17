@@ -19,9 +19,11 @@ interface SubscriptionResponse {
 
 export class SubscriptionService {
   private bot: Bot<BotContext>;
+  private paymentService: PaymentService;
 
-  constructor(bot: Bot<BotContext>) {
+  constructor(bot: Bot<BotContext>, paymentService: PaymentService) {
     this.bot = bot;
+    this.paymentService = paymentService;
   }
 
   async createSubscription(
@@ -245,8 +247,6 @@ export class SubscriptionService {
       throw new Error('User not found');
     }
 
-    const paymentService = new PaymentService();
-
     try {
       let paymentResult;
 
@@ -260,16 +260,16 @@ export class SubscriptionService {
       switch (cardType) {
         case CardType.CLICK:
           logger.info(`(Auto payment) Calling Click for userId: ${userId}, cardType: ${cardType}`);
-          const clickResult = await paymentService.paymentWithClickSubsApi(requestBody);
+          const clickResult = await this.paymentService.paymentWithClickSubsApi(requestBody);
           paymentResult = clickResult;
           break;
         case CardType.PAYME:
           logger.info(`(Auto payment) Calling Payme for userId: ${userId}, cardType: ${cardType}`);
-          paymentResult = await paymentService.paymentWithPaymeSubsApi(requestBody);
+          paymentResult = await this.paymentService.paymentWithPaymeSubsApi(requestBody);
           break;
           // case CardType.UZCARD:
           //     logger.info(`(Auto payment) Calling Uzcard for userId: ${userId}, cardType: ${cardType}`);
-          //     paymentResult = await paymentService.paymentWithUzcardSubsApi(requestBody);
+          //     paymentResult = await this.paymentService.paymentWithUzcardSubsApi(requestBody);
           break;
         default:
           throw new Error(`Unsupported card type: ${cardType}`);
