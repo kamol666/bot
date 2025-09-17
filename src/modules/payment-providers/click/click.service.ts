@@ -595,4 +595,39 @@ export class ClickService {
             };
         }
     }
+
+    async checkPaymentByMerchantTransId(merchantTransId: string, date: string) {
+        try {
+            // ✅ Format: YYYY-MM-DD
+            const url = `https://api.click.uz/v2/merchant/payment/status_by_mti/${this.serviceId}/${merchantTransId}/${date}`;
+
+            const authHeader = this.generateAuthHeader();
+
+            logger.info('Payment status tekshirilmoqda (MTI)', { merchantTransId, date });
+
+            const response = await axios.get(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'Auth': authHeader,
+                },
+                timeout: 10000,
+            });
+
+            logger.info('Payment status javobi (MTI)', {
+                merchantTransId,
+                paymentId: response.data.payment_id,
+                error_code: response.data.error_code
+            });
+
+            return response.data;
+        } catch (error: any) {
+            logger.error('Payment status (MTI) tekshirishda xatolik:', {
+                error: error.message,
+                merchantTransId,
+                date
+            });
+            throw new Error('Payment status tekshirishda xatolik yuz berdi');
+        }
+    }
 }

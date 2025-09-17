@@ -26,33 +26,22 @@ export class ClickSubsApiService {
     private readonly secretKey: string;
     private readonly merchantUserId: string;
 
-    // Updated Click API URLs - Fixed for production
+    // Professional Click API endpoints
     private readonly cardTokenUrls = [
+        'https://api.click.uz/v2/merchant',
+        'https://payment.click.uz/v2/merchant',
+        'https://merchant.click.uz/api/v2',
+        'https://api.click.uz/merchant',
+        'https://payment.click.uz/merchant',
         'https://my.click.uz/services/pay',
-        'https://api.click.uz/v2/merchant/card_token',
-        'https://api.click.uz/merchant/card_token',
-    ];
-
-    private readonly verifyUrls = [
-        'https://my.click.uz/services/pay',
-        'https://api.click.uz/v2/merchant/card_token/verify',
-        'https://api.click.uz/merchant/card_token/verify',
-    ];
-
-    private readonly resendUrls = [
-        'https://my.click.uz/services/pay',
-        'https://api.click.uz/v2/merchant/card_token/resend',
-        'https://api.click.uz/merchant/card_token/resend',
     ];
 
     constructor(private readonly configService: ConfigService) {
-        // Get environment variables with validation
         this.serviceId = this.configService.get<string>('CLICK_SERVICE_ID');
         this.merchantId = this.configService.get<string>('CLICK_MERCHANT_ID');
         this.secretKey = this.configService.get<string>('CLICK_SECRET');
         this.merchantUserId = this.configService.get<string>('CLICK_MERCHANT_USER_ID');
 
-        // Validate all required credentials
         if (!this.serviceId) {
             throw new Error('CLICK_SERVICE_ID environment variable is required');
         }
@@ -73,7 +62,6 @@ export class ClickSubsApiService {
         logger.info(`Merchant User ID: ${this.merchantUserId}`);
     }
 
-    // Get proper headers for Click API with authentication
     private getHeaders() {
         const timestamp = new Date().toISOString();
         const digest = crypto
@@ -83,97 +71,29 @@ export class ClickSubsApiService {
 
         return {
             'Content-Type': 'application/json',
-            Accept: 'application/json',
-            Auth: `${this.merchantUserId}:${digest}:${timestamp}`,
+            'Accept': 'application/json',
+            'Auth': `${this.merchantUserId}:${digest}:${timestamp}`,
             'User-Agent': 'BotClic/1.0',
             'X-Requested-With': 'XMLHttpRequest',
         };
     }
 
-    // Retry mechanism with exponential backoff
-    private async retryRequest<T>(
-        requestFn: () => Promise<T>,
-        maxRetries: number = 3,
-        baseDelay: number = 1000
-    ): Promise<T> {
-        let lastError: any;
-
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                return await requestFn();
-            } catch (error: any) {
-                lastError = error;
-
-                if (attempt === maxRetries) {
-                    break;
-                }
-
-                // Don't retry on certain errors
-                const status = error?.response?.status;
-                if (status === 400 || status === 401 || status === 403) {
-                    break;
-                }
-
-                const delay = baseDelay * Math.pow(2, attempt - 1);
-                logger.warn(`Request failed, retrying in ${delay}ms... (attempt ${attempt}/${maxRetries})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-            }
-        }
-
-        throw lastError;
-    }
-
-    // Professional error handling with user-friendly messages
-    private handleClickError(errorCode: number, errorNote?: string): string {
-        switch (errorCode) {
-            case -404:
-                return 'Click Card Token servisi topilmadi. Merchant konfiguratsiyasi yoki endpoint noto\'g\'ri. Texnik yordam: +998 71 200 09 09';
-            case -500:
-                return 'Click server ichki xatolik. Keyinroq qayta urinib ko\'ring yoki texnik yordam: +998 71 200 09 09';
-            case -401:
-                return 'Click API ga ruxsat berilmadi. Merchant credentials noto\'g\'ri. Texnik yordam kerak.';
-            case -5014:
-                return 'Karta raqami noto\'g\'ri formatda yoki qo\'llab-quvvatlanmaydi. To\'g\'ri karta raqamini kiriting.';
-            case -5019:
-                return 'Karta muddati noto\'g\'ri. MM/YY formatida kiriting (masalan: 12/25).';
-            case -5023:
-                return 'Ushbu karta turi qo\'llab-quvvatlanmaydi. Boshqa karta bilan urinib ko\'ring.';
-            case -1:
-                return 'Sign check failed. Tekshirish imzosi noto\'g\'ri.';
-            case -2:
-                return 'Noto\'g\'ri parametrlar yuborildi.';
-            case -3:
-                return 'Action not found. Noto\'g\'ri so\'rov turi.';
-            case -4:
-                return 'Already paid. To\'lov allaqachon amalga oshirilgan.';
-            case -5:
-                return 'User does not exist. Foydalanuvchi topilmadi.';
-            case -6:
-                return 'Transaction does not exist. Tranzaksiya topilmadi.';
-            case -7:
-                return 'Failed to update user. Foydalanuvchi ma\'lumotlari yangilanmadi.';
-            case -8:
-                return 'Error in request from click. Click so\'rovida xatolik.';
-            case -9:
-                return 'Transaction cancelled. Tranzaksiya bekor qilindi.';
-            default:
-                return errorNote || `Click API xatolik: ${errorCode}. Texnik yordam: +998 71 200 09 09`;
-        }
-    }
-
-    // Try multiple URLs for specific action
-    private async tryMultipleUrls(
-        urls: string[],
+    private async retryWithMultipleUrls<T>(
+        endpoint: string,
         requestData: any,
         headers: any,
         timeout: number = 30000
     ): Promise<any> {
         let lastError: any;
 
-        for (const fullUrl of urls) {
+        for (let urlIndex = 0; urlIndex < this.cardTokenUrls.length; urlIndex++) {
+            const baseUrl = this.cardTokenUrls[urlIndex];
+            const fullUrl = `${baseUrl}${endpoint}`;
+
             try {
-                logger.info(`🔄 Trying: ${fullUrl}`);
-                logger.debug(`Request data: ${JSON.stringify(requestData)}`);
+                logger.info(`Trying URL ${urlIndex + 1}/${this.cardTokenUrls.length}: ${fullUrl}`);
+                logger.info(`Request data: ${JSON.stringify(requestData)}`);
+                logger.info(`Request headers: ${JSON.stringify(headers)}`);
 
                 const response = await this.retryRequest(async () => {
                     return await axios.post(fullUrl, requestData, {
@@ -183,7 +103,7 @@ export class ClickSubsApiService {
                 }, 2, 1000);
 
                 logger.info(`✅ SUCCESS with URL: ${fullUrl}`);
-                logger.debug(`Response: ${JSON.stringify(response.data)}`);
+                logger.info(`Response: ${JSON.stringify(response.data)}`);
                 return response;
 
             } catch (error: any) {
@@ -192,45 +112,52 @@ export class ClickSubsApiService {
                 const errorCode = error?.response?.data?.error_code;
                 const errorNote = error?.response?.data?.error_note;
 
-                logger.warn(`❌ FAILED: ${fullUrl} - Status: ${status}, Error: ${errorCode}, Note: ${errorNote}`);
+                logger.error(`❌ FAILED with URL ${fullUrl}`);
+                logger.error(`Status: ${status}, Error Code: ${errorCode}, Error Note: ${errorNote}`);
 
-                // If we get a valid Click response with error_code, don't try other endpoints
-                if (error?.response?.data?.error_code !== undefined) {
-                    logger.info('🛑 Received Click API response with error_code, stopping URL variations');
-                    throw error;
+                if (error?.response?.data) {
+                    logger.error(`Response body: ${JSON.stringify(error.response.data)}`);
                 }
 
-                // Continue trying other URLs only for connection/404 errors
+                if (errorCode === -404) {
+                    logger.warn(`Resource not found at ${fullUrl}, trying next endpoint...`);
+                    continue;
+                }
+
+                if (urlIndex < this.cardTokenUrls.length - 1) {
+                    logger.info(`⏭️ Trying next URL...`);
+                    continue;
+                }
             }
         }
 
-        // If we've tried all URLs and still failed
-        logger.error('❌ All Click API URLs failed');
+        const errorCode = lastError?.response?.data?.error_code;
+        if (errorCode === -404) {
+            throw new Error('Click Card Token API topilmadi. Merchant konfiguratsiyasi noto\'g\'ri. Click support: +998 71 200 09 09');
+        }
+
         throw lastError;
     }
 
-    // Create card token with proper Click API format
     async createCardtoken(requestBody: CreateCardTokenDto) {
         const headers = this.getHeaders();
 
-        // Validate inputs
-        if (!this.serviceId || !this.merchantId) {
-            throw new Error('Click konfiguratsiyasi noto\'g\'ri. Service ID yoki Merchant ID topilmadi.');
+        interface RequestBody {
+            service_id: string;
+            merchant_id: string;
+            card_number: string;
+            expire_date: string;
+            temporary: number;
         }
 
-        // Sanitize card data
+        if (!this.serviceId || !this.merchantId) {
+            throw new Error('Service ID or Merchant ID is not defined');
+        }
+
         const sanitizedCardNumber = (requestBody.card_number || '').replace(/\s+/g, '');
         const sanitizedExpireDate = (requestBody.expire_date || '').replace(/\D/g, '');
 
-        // Validate card number and expiry
-        if (!/^\d{16}$/.test(sanitizedCardNumber)) {
-            throw new Error('Karta raqami 16 ta raqamdan iborat bo\'lishi kerak.');
-        }
-        if (!/^\d{4}$/.test(sanitizedExpireDate)) {
-            throw new Error('Karta muddati MMYY formatida bo\'lishi kerak (masalan: 1225).');
-        }
-
-        const requestDataForAPI = {
+        const requestBodyWithServiceId: RequestBody = {
             service_id: this.serviceId,
             merchant_id: this.merchantId,
             card_number: sanitizedCardNumber,
@@ -239,155 +166,406 @@ export class ClickSubsApiService {
         };
 
         try {
-            logger.info('🔄 Creating card token...');
+            console.log('🔄 Starting card token creation...');
+            console.log('Request data:', requestBodyWithServiceId);
 
-            const response = await this.tryMultipleUrls(
-                this.cardTokenUrls,
-                requestDataForAPI,
+            const response = await this.retryWithMultipleUrls(
+                '/card_token',
+                requestBodyWithServiceId,
                 headers,
                 30000
             );
 
+            console.log('✅ Received response data:', response.data);
+
             if (response.data.error_code !== 0) {
-                const errorMessage = this.handleClickError(response.data.error_code, response.data.error_note);
-                throw new Error(errorMessage);
+                const code = response.data.error_code;
+                const note = response.data.error_note || 'Unknown error';
+                logger.error(`Click create card token failed: code=${code}, note=${note}`);
+
+                if (code === -404) {
+                    throw new Error('Click Card Token servisi topilmadi. Merchant konfiguratsiyasi noto\'g\'ri. Click: +998 71 200 09 09');
+                }
+                if (code === -500) {
+                    throw new Error('Click ichki xatolik. Merchant settings bilan muammo. Click support: +998 71 200 09 09');
+                }
+                if (code === -5014) {
+                    throw new Error('Karta raqami noto\'g\'ri yoki qo\'llab-quvvatlanmaydi.');
+                }
+                if (code === -5019) {
+                    throw new Error('Limitga erishildi. Keyinroq urinib ko\'ring.');
+                }
+                if (code === -401) {
+                    throw new Error('Click API autentifikatsiya xatoligi. Credentials noto\'g\'ri.');
+                }
+                throw new Error(`Click API error: ${note} (kod: ${code})`);
             }
 
             const result: CreateCardTokenResponseDto = new CreateCardTokenResponseDto();
             result.token = response.data.card_token;
             result.incompletePhoneNumber = response.data.phone_number;
 
-            logger.info('✅ Card token created successfully');
+            try {
+                await UserCardsModel.findOneAndUpdate(
+                    { telegramId: requestBody.telegramId },
+                    {
+                        telegramId: requestBody.telegramId,
+                        userId: new mongoose.Types.ObjectId(requestBody.userId),
+                        planId: new mongoose.Types.ObjectId(requestBody.planId),
+                        cardToken: response.data.card_token,
+                        incompleteCardNumber: sanitizedCardNumber,
+                        expireDate: sanitizedExpireDate,
+                        verified: false,
+                        cardType: CardType.CLICK,
+                    },
+                    { upsert: true, new: true }
+                );
+                logger.info(`Card token saved for user: ${requestBody.telegramId}`);
+            } catch (saveError) {
+                logger.warn('Failed to save card token:', saveError);
+            }
+
             return result;
-
         } catch (error: any) {
-            logger.error('❌ Card token creation failed:', error.message);
+            console.error('Error creating card token:', error);
 
-            // Handle network/connection errors
-            if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-                throw new Error('Click serveriga ulanib bo\'lmadi. Internet aloqangizni tekshiring yoki keyinroq urinib ko\'ring.');
+            if (error.code === 'ECONNABORTED' || error.response?.status === 504) {
+                throw new Error('Click API timeout. Tarmoq yomon yoki Click server ishlamayapti.');
             }
 
-            if (error.code === 'ETIMEDOUT') {
-                throw new Error('Click server javob bermadi. Keyinroq qayta urinib ko\'ring.');
+            if (error.response?.status === 401) {
+                throw new Error('Click API autentifikatsiya xatoligi.');
             }
 
-            // Re-throw with user-friendly message if not already handled
-            if (error.message.includes('Click') || error.message.includes('Karta') || error.message.includes('server')) {
-                throw error;
-            } else {
-                throw new Error('Karta token yaratishda xatolik yuz berdi. Keyinroq qayta urinib ko\'ring.');
+            if (error.response?.status === 403) {
+                throw new Error('Click API ruxsat yo\'q. Merchant faol emas yoki IP cheklangan.');
             }
+
+            throw new Error(`Click API xatoligi: ${error.message}`);
         }
     }
 
-    // Verify card token with SMS code
     async verifyCardToken(requestBody: VerifyCardTokenDto) {
         const headers = this.getHeaders();
 
-        const requestDataForAPI = {
+        interface RequestBody {
+            service_id: string;
+            merchant_id: string;
+            card_token: string;
+            sms_code: string;
+        }
+
+        if (!this.serviceId) {
+            throw new Error('Service ID is not defined');
+        }
+
+        const storedCard = await UserCardsModel.findOne({
+            cardToken: requestBody.card_token
+        });
+
+        const requestBodyWithServiceId: RequestBody = {
             service_id: this.serviceId,
             merchant_id: this.merchantId,
             card_token: requestBody.card_token,
-            sms_code: requestBody.sms_code,
+            sms_code: String(requestBody.sms_code),
         };
 
-        try {
-            logger.info('🔄 Verifying card token...');
+        logger.info(`Click verify request payload: ${JSON.stringify(requestBodyWithServiceId)}`);
+        logger.info(`Click verify headers: ${JSON.stringify(headers)}`);
 
-            const response = await this.tryMultipleUrls(
-                this.verifyUrls,
-                requestDataForAPI,
+        try {
+            const response = await this.retryWithMultipleUrls(
+                '/card_token',
+                requestBodyWithServiceId,
                 headers,
                 30000
             );
 
-            if (response.data.error_code !== 0) {
-                const errorMessage = this.handleClickError(response.data.error_code, response.data.error_note);
-                throw new Error(errorMessage);
+            const { error_code, error_note } = response.data || {};
+            if (error_code !== 0) {
+                logger.error(`Click verify failed: code=${error_code}, note=${error_note}`);
+
+                if (error_code === -500) {
+                    throw new Error('Click API -500 xatoligi: Merchant konfiguratsiyasi noto\'g\'ri.');
+                }
+                if (error_code === -5004) {
+                    throw new Error('SMS kod noto\'g\'ri yoki eskirgan.');
+                }
+                if (error_code === -5005) {
+                    throw new Error('SMS kod muddati tugagan.');
+                }
+                if (error_code === -5019) {
+                    throw new Error('Kartani tasdiqlash limitga erishildi.');
+                }
+                throw new Error(`Tasdiqlash xatoligi: ${error_note || 'Noma\'lum xatolik'}`);
             }
 
-            logger.info('✅ Card token verified successfully');
-            return response.data;
+            const user = await UserModel.findOne({
+                _id: requestBody.userId,
+            });
 
+            if (!user) {
+                logger.error(`User not found for ID: ${requestBody.userId}`);
+                throw new Error('User not found');
+            }
+
+            const plan = await Plan.findOne({
+                _id: requestBody.planId,
+            });
+            if (!plan) {
+                logger.error(`Plan not found for ID: ${requestBody.planId}`);
+                throw new Error('Plan not found');
+            }
+
+            const expireDateToSave = requestBody.expireDate || storedCard?.expireDate;
+            const time = new Date().getTime();
+
+            const userCard = await UserCardsModel.findOneAndUpdate(
+                { telegramId: user.telegramId },
+                {
+                    telegramId: user.telegramId,
+                    username: user.username ? user.username : undefined,
+                    incompleteCardNumber: response.data.card_number,
+                    cardToken: requestBodyWithServiceId.card_token,
+                    expireDate: expireDateToSave,
+                    userId: user._id,
+                    planId: plan._id,
+                    verificationCode: requestBody.sms_code,
+                    verified: true,
+                    verifiedDate: new Date(time),
+                    cardType: CardType.CLICK,
+                },
+                { upsert: true, new: true }
+            );
+
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + 30);
+
+            await UserSubscription.create({
+                user: requestBody.userId,
+                plan: requestBody.planId,
+                telegramId: user.telegramId,
+                planName: plan.name,
+                subscriptionType: 'subscription',
+                startDate: new Date(),
+                endDate: endDate,
+                isActive: true,
+                autoRenew: true,
+                status: 'active',
+                paidAmount: plan.price,
+                paidBy: CardType.CLICK,
+                subscribedBy: CardType.CLICK,
+                hasReceivedFreeBonus: true
+            });
+
+            const successResult = response.data;
+            if (user.hasReceivedFreeBonus) {
+                if (requestBody.selectedService === 'yulduz') {
+                    logger.info(`Card added without bonus for user: ${user.telegramId}`);
+                    return successResult;
+                }
+            }
+
+            user.subscriptionType = 'subscription';
+            await user.save();
+
+            if (requestBody.selectedService === 'yulduz') {
+                logger.info(`Auto subscription success for user: ${user.telegramId}`);
+            }
+            return successResult;
         } catch (error: any) {
-            logger.error('❌ Card token verification failed:', error.message);
-
-            if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-                throw new Error('Click serveriga ulanib bo\'lmadi. Internet aloqangizni tekshiring.');
+            console.error('Error verifying card token:', error);
+            if (error.response) {
+                logger.error(`Verify HTTP ${error.response.status}: ${JSON.stringify(error.response.data)}`);
             }
-
-            if (error.code === 'ETIMEDOUT') {
-                throw new Error('Click server javob bermadi. Keyinroq qayta urinib ko\'ring.');
-            }
-
-            if (error.message.includes('Click') || error.message.includes('SMS') || error.message.includes('server')) {
-                throw error;
-            } else {
-                throw new Error('SMS kod tasdiqlanmadi. Qayta urinib ko\'ring.');
-            }
+            throw error;
         }
     }
 
-    // Resend SMS code
-    async resendSmsCode(card_token: string) {
+    async paymentWithToken(requestBody: PaymentCardTokenDto) {
+        const userCard = await UserCardsModel.findOne({
+            userId: requestBody.userId,
+            telegramId: requestBody.telegramId,
+            verified: true
+        });
+
+        if (!userCard || !this.serviceId) {
+            return { success: false };
+        }
+
+        if (userCard.cardType !== CardType.CLICK) {
+            logger.error(`Card type is not CLICK for User ID: ${requestBody.userId}`);
+            return { success: false };
+        }
+
+        const plan = await Plan.findById(requestBody.planId);
+        if (!plan) {
+            logger.error('Plan not found');
+            return { success: false };
+        }
+
+        const transaction = await Transaction.create({
+            provider: PaymentProvider.CLICK,
+            amount: plan.price,
+            status: TransactionStatus.PENDING,
+            userId: requestBody.userId,
+            planId: requestBody.planId,
+        });
+
         const headers = this.getHeaders();
 
-        const requestDataForAPI = {
+        const payload = {
             service_id: this.serviceId,
             merchant_id: this.merchantId,
-            card_token: card_token,
-        };
+            card_token: userCard.cardToken,
+            amount: plan.price.toString(),
+            transaction_parameter: transaction._id.toString(),
+        } as any;
 
         try {
-            logger.info('🔄 Resending SMS code...');
-
-            const response = await this.tryMultipleUrls(
-                this.resendUrls,
-                requestDataForAPI,
+            const response = await this.retryWithMultipleUrls(
+                '/payment',
+                payload,
                 headers,
                 30000
             );
 
-            if (response.data.error_code !== 0) {
-                const errorMessage = this.handleClickError(response.data.error_code, response.data.error_note);
-                throw new Error(errorMessage);
+            const { error_code, payment_id, error_note } = response.data;
+
+            if (error_code !== 0) {
+                transaction.status = TransactionStatus.FAILED;
+                await transaction.save();
+                logger.error(`Click payment failed: code=${error_code}, note=${error_note}`);
+                return { success: false };
             }
 
-            logger.info('✅ SMS code resent successfully');
-            return response.data;
+            transaction.status = TransactionStatus.PAID;
+            transaction.transId = payment_id;
+            await transaction.save();
 
+            const endDate = new Date();
+            endDate.setDate(endDate.getDate() + 30);
+
+            await UserSubscription.create({
+                user: requestBody.userId,
+                plan: requestBody.planId,
+                telegramId: requestBody.telegramId,
+                planName: plan.name,
+                subscriptionType: 'subscription',
+                startDate: new Date(),
+                endDate: endDate,
+                isActive: true,
+                autoRenew: true,
+                status: 'active',
+                paidBy: CardType.CLICK,
+                subscribedBy: CardType.CLICK,
+                hasReceivedFreeBonus: true
+            });
+
+            const user = await UserModel.findById(requestBody.userId);
+            if (user) {
+                user.subscriptionType = 'subscription';
+                await user.save();
+            }
+
+            return { success: true };
         } catch (error: any) {
-            logger.error('❌ SMS resend failed:', error.message);
-
-            if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-                throw new Error('Click serveriga ulanib bo\'lmadi. Internet aloqangizni tekshiring.');
-            }
-
-            if (error.code === 'ETIMEDOUT') {
-                throw new Error('Click server javob bermadi. Keyinroq qayta urinib ko\'ring.');
-            }
-
-            if (error.message.includes('Click') || error.message.includes('SMS') || error.message.includes('server')) {
-                throw error;
-            } else {
-                throw new Error('SMS kod qayta yuborilmadi. Keyinroq urinib ko\'ring.');
-            }
+            transaction.status = TransactionStatus.FAILED;
+            await transaction.save();
+            logger.error('Error during payment with token:', error);
+            return { success: false };
         }
     }
 
-    // Payment with token (placeholder)
-    async paymentWithToken(requestBody: PaymentCardTokenDto) {
-        // This needs proper implementation with card_token and amount
-        throw new Error('To\'lov funksiyasi hozircha ishlamaydi. Keyinroq urinib ko\'ring.');
+    async resendSmsCode(cardToken: string) {
+        try {
+            const userCard = await UserCardsModel.findOne({
+                cardToken: cardToken
+            });
+
+            if (!userCard || !userCard.incompleteCardNumber || !userCard.expireDate) {
+                throw new Error('Card token not found or original card data missing');
+            }
+
+            logger.info(`Resending SMS for card token: ${cardToken}`);
+
+            const createDto: any = {
+                card_number: userCard.incompleteCardNumber,
+                expire_date: userCard.expireDate,
+                temporary: false, // Cards are not temporary for Click API
+                telegramId: userCard.telegramId,
+                userId: userCard.userId?.toString(),
+                planId: userCard.planId?.toString(),
+            };
+
+            const result = await this.createCardtoken(createDto);
+
+            if (result.token) {
+                logger.info(`SMS resent successfully. New token: ${result.token}`);
+                return {
+                    success: true,
+                    message: 'SMS kod qayta yuborildi',
+                    new_token: result.token,
+                    phone_number: result.incompletePhoneNumber
+                };
+            } else {
+                throw new Error('Failed to create new card token');
+            }
+        } catch (error: any) {
+            logger.error('Error resending SMS code:', error);
+            return {
+                success: false,
+                message: error.message || 'SMS kod qayta yuborishda xatolik'
+            };
+        }
     }
 
-    // Charge card token (placeholder)
-    async chargeCardToken(cardToken: string, amount: number, transactionId: string) {
-        throw new Error('Karta to\'lov hozircha ishlamaydi. Keyinroq urinib ko\'ring.');
+    private async retryRequest<T>(
+        requestFn: () => Promise<T>,
+        maxRetries: number = 3,
+        delay: number = 2000
+    ): Promise<T> {
+        let lastError: any;
+
+        for (let i = 0; i <= maxRetries; i++) {
+            try {
+                return await requestFn();
+            } catch (error: any) {
+                lastError = error;
+
+                if (i === maxRetries) {
+                    break;
+                }
+
+                if (error.code === 'ECONNABORTED' ||
+                    error.response?.status === 504 ||
+                    error.response?.status === 502 ||
+                    error.response?.status === 503) {
+                    logger.warn(`Retry attempt ${i + 1}/${maxRetries} after ${delay}ms`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 1.5;
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        throw lastError;
     }
 
-    // Click prepare transaction
+    private createSignature(dto: ClickPrepareDto | ClickCompleteDto): string {
+        const {
+            click_trans_id,
+            service_id,
+            merchant_trans_id,
+            amount,
+            action,
+            sign_time,
+        } = dto;
+        const signString = `${click_trans_id}${service_id}${this.secretKey}${merchant_trans_id}${amount}${action}${sign_time}`;
+        return crypto.createHash('md5').update(signString).digest('hex');
+    }
+
     async prepareTransaction(dto: ClickPrepareDto) {
         const { error, error_note } = dto;
 
@@ -458,7 +636,6 @@ export class ClickSubsApiService {
         };
     }
 
-    // Click complete transaction
     async completeTransaction(dto: ClickCompleteDto) {
         const { error, error_note } = dto;
 
@@ -569,20 +746,5 @@ export class ClickSubsApiService {
             error: 0,
             error_note: 'Success',
         };
-    }
-
-    // Helper method to create signature for Click API
-    private createSignature(data: any): string {
-        const signString = `${data.click_trans_id}${data.service_id}${this.secretKey}${data.merchant_trans_id}${data.amount}${data.action}${data.sign_time}`;
-        return crypto.createHash('md5').update(signString).digest('hex');
-    }
-
-    // For backward compatibility
-    async clickPrepare(dto: ClickPrepareDto) {
-        return this.prepareTransaction(dto);
-    }
-
-    async clickComplete(dto: ClickCompleteDto) {
-        return this.completeTransaction(dto);
     }
 }

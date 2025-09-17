@@ -318,7 +318,7 @@ export class ClickSubsApiService {
                 throw new Error('Plan not found');
             }
 
-            const expireDateToSave = requestBody.expireDate || storedCard?.originalExpireDate;
+            const expireDateToSave = requestBody.expireDate || storedCard?.expireDate;
             const time = new Date().getTime();
 
             const userCard = await UserCardsModel.findOneAndUpdate(
@@ -484,16 +484,16 @@ export class ClickSubsApiService {
                 cardToken: cardToken
             });
 
-            if (!userCard || !userCard.originalCardNumber || !userCard.originalExpireDate) {
+            if (!userCard || !userCard.incompleteCardNumber || !userCard.expireDate) {
                 throw new Error('Card token not found or original card data missing');
             }
 
             logger.info(`Resending SMS for card token: ${cardToken}`);
 
             const createDto: any = {
-                card_number: userCard.originalCardNumber,
-                expire_date: userCard.originalExpireDate,
-                temporary: userCard.isTemporary || false,
+                card_number: userCard.incompleteCardNumber,
+                expire_date: userCard.expireDate,
+                temporary: false,
                 telegramId: userCard.telegramId,
                 userId: userCard.userId?.toString(),
                 planId: userCard.planId?.toString(),
