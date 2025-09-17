@@ -50,31 +50,17 @@ export class ClickController {
    */
   @Get('invoice-status/:invoiceId')
   @HttpCode(HttpStatus.OK)
-  async checkInvoiceStatus(@Param('invoiceId') invoiceId: number) {
-    logger.info('Invoice status tekshirish:', { invoiceId });
-    return await this.clickService.checkInvoiceStatus(invoiceId);
-  }
+  async checkInvoiceStatus(@Param('invoiceId') invoiceId: string) {
+    const invoiceIdNumber = parseInt(invoiceId, 10);
 
-  /**
-   * Payment status tekshirish endpoint (payment_id orqali)
-   */
-  @Get('payment-status/:paymentId')
-  @HttpCode(HttpStatus.OK)
-  async checkPaymentStatus(@Param('paymentId') paymentId: number) {
-    logger.info('Payment status tekshirish:', { paymentId });
-    return await this.clickService.checkPaymentStatus(paymentId);
-  }
+    if (isNaN(invoiceIdNumber)) {
+      return {
+        error_code: -1,
+        error_note: 'Invalid invoice ID format'
+      };
+    }
 
-  /**
-   * Payment status tekshirish endpoint (merchant_trans_id orqali)
-   */
-  @Get('payment-status-by-mti/:merchantTransId/:date')
-  @HttpCode(HttpStatus.OK)
-  async checkPaymentByMerchantTransId(
-    @Param('merchantTransId') merchantTransId: string,
-    @Param('date') date: string
-  ) {
-    logger.info('Payment status tekshirish (MTI):', { merchantTransId, date });
-    return await this.clickService.checkPaymentByMerchantTransId(merchantTransId, date);
+    logger.info('Invoice status tekshirish:', { invoiceId: invoiceIdNumber });
+    return await this.clickService.checkInvoiceStatus(invoiceIdNumber);
   }
 }
