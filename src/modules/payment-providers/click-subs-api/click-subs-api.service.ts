@@ -241,7 +241,7 @@ export class ClickSubsApiService {
             logger.info('🔄 Creating card token...');
 
             const response = await this.tryMultipleEndpoints(
-                '/request',  // Standard Click card token endpoint
+                '/request',
                 requestDataForAPI,
                 headers,
                 30000
