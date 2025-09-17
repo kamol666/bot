@@ -26,23 +26,23 @@ export class ClickSubsApiService {
     private readonly secretKey: string;
     private readonly merchantUserId: string;
 
-    // Verified Click API base URLs (production ready)
+    // Updated Click API URLs - Fixed for production
     private readonly cardTokenUrls = [
-        'https://api.click.uz/v2/merchant/card_token/request',
-        'https://api.click.uz/merchant/card_token/request',
-        'https://my.click.uz/services/pay/card_token/request',
+        'https://my.click.uz/services/pay',
+        'https://api.click.uz/v2/merchant/card_token',
+        'https://api.click.uz/merchant/card_token',
     ];
 
     private readonly verifyUrls = [
+        'https://my.click.uz/services/pay',
         'https://api.click.uz/v2/merchant/card_token/verify',
         'https://api.click.uz/merchant/card_token/verify',
-        'https://my.click.uz/services/pay/card_token/verify',
     ];
 
     private readonly resendUrls = [
+        'https://my.click.uz/services/pay',
         'https://api.click.uz/v2/merchant/card_token/resend',
         'https://api.click.uz/merchant/card_token/resend',
-        'https://my.click.uz/services/pay/card_token/resend',
     ];
 
     constructor(private readonly configService: ConfigService) {
