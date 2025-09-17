@@ -27,10 +27,22 @@ export class ClickSubsApiService {
     private readonly merchantUserId: string;
 
     // Verified Click API base URLs (production ready)
-    private readonly apiBaseUrls = [
-        'https://api.click.uz/v2/merchant',  // Primary v2 API
-        'https://api.click.uz/merchant',     // v1 API fallback
-        'https://my.click.uz/services/pay',  // Legacy API
+    private readonly cardTokenUrls = [
+        'https://api.click.uz/v2/merchant/card_token/request',
+        'https://api.click.uz/merchant/card_token/request',
+        'https://my.click.uz/services/pay/card_token/request',
+    ];
+
+    private readonly verifyUrls = [
+        'https://api.click.uz/v2/merchant/card_token/verify',
+        'https://api.click.uz/merchant/card_token/verify',
+        'https://my.click.uz/services/pay/card_token/verify',
+    ];
+
+    private readonly resendUrls = [
+        'https://api.click.uz/v2/merchant/card_token/resend',
+        'https://api.click.uz/merchant/card_token/resend',
+        'https://my.click.uz/services/pay/card_token/resend',
     ];
 
     constructor(private readonly configService: ConfigService) {
@@ -149,62 +161,51 @@ export class ClickSubsApiService {
         }
     }
 
-    // Try multiple URLs with different endpoint formats
-    private async tryMultipleEndpoints<T>(
-        endpoint: string,
+    // Try multiple URLs for specific action
+    private async tryMultipleUrls(
+        urls: string[],
         requestData: any,
         headers: any,
         timeout: number = 30000
     ): Promise<any> {
-        const endpointVariations = [
-            endpoint,                           // Original endpoint
-            `/card_token${endpoint}`,          // With card_token prefix
-            `/v2${endpoint}`,                  // With v2 prefix
-            `/api/v2${endpoint}`,              // With api/v2 prefix
-        ];
-
         let lastError: any;
 
-        for (const baseUrl of this.apiBaseUrls) {
-            for (const endpointVar of endpointVariations) {
-                const fullUrl = `${baseUrl}${endpointVar}`;
+        for (const fullUrl of urls) {
+            try {
+                logger.info(`🔄 Trying: ${fullUrl}`);
+                logger.debug(`Request data: ${JSON.stringify(requestData)}`);
 
-                try {
-                    logger.info(`🔄 Trying: ${fullUrl}`);
-                    logger.debug(`Request data: ${JSON.stringify(requestData)}`);
+                const response = await this.retryRequest(async () => {
+                    return await axios.post(fullUrl, requestData, {
+                        headers,
+                        timeout,
+                    });
+                }, 2, 1000);
 
-                    const response = await this.retryRequest(async () => {
-                        return await axios.post(fullUrl, requestData, {
-                            headers,
-                            timeout,
-                        });
-                    }, 2, 1000);
+                logger.info(`✅ SUCCESS with URL: ${fullUrl}`);
+                logger.debug(`Response: ${JSON.stringify(response.data)}`);
+                return response;
 
-                    logger.info(`✅ SUCCESS with URL: ${fullUrl}`);
-                    logger.debug(`Response: ${JSON.stringify(response.data)}`);
-                    return response;
+            } catch (error: any) {
+                lastError = error;
+                const status = error?.response?.status;
+                const errorCode = error?.response?.data?.error_code;
+                const errorNote = error?.response?.data?.error_note;
 
-                } catch (error: any) {
-                    lastError = error;
-                    const status = error?.response?.status;
-                    const errorCode = error?.response?.data?.error_code;
-                    const errorNote = error?.response?.data?.error_note;
+                logger.warn(`❌ FAILED: ${fullUrl} - Status: ${status}, Error: ${errorCode}, Note: ${errorNote}`);
 
-                    logger.warn(`❌ FAILED: ${fullUrl} - Status: ${status}, Error: ${errorCode}, Note: ${errorNote}`);
-
-                    // If we get a valid Click response with error_code, don't try other endpoints
-                    if (error?.response?.data?.error_code !== undefined) {
-                        logger.info('🛑 Received Click API response with error_code, stopping endpoint variations');
-                        throw error;
-                    }
-
-                    // Continue trying other endpoints only for connection/404 errors
+                // If we get a valid Click response with error_code, don't try other endpoints
+                if (error?.response?.data?.error_code !== undefined) {
+                    logger.info('🛑 Received Click API response with error_code, stopping URL variations');
+                    throw error;
                 }
+
+                // Continue trying other URLs only for connection/404 errors
             }
         }
 
-        // If we've tried all endpoints and still failed
-        logger.error('❌ All Click API endpoints failed');
+        // If we've tried all URLs and still failed
+        logger.error('❌ All Click API URLs failed');
         throw lastError;
     }
 
@@ -240,8 +241,8 @@ export class ClickSubsApiService {
         try {
             logger.info('🔄 Creating card token...');
 
-            const response = await this.tryMultipleEndpoints(
-                '/request',
+            const response = await this.tryMultipleUrls(
+                this.cardTokenUrls,
                 requestDataForAPI,
                 headers,
                 30000
@@ -294,8 +295,8 @@ export class ClickSubsApiService {
         try {
             logger.info('🔄 Verifying card token...');
 
-            const response = await this.tryMultipleEndpoints(
-                '/verify',
+            const response = await this.tryMultipleUrls(
+                this.verifyUrls,
                 requestDataForAPI,
                 headers,
                 30000
@@ -341,8 +342,8 @@ export class ClickSubsApiService {
         try {
             logger.info('🔄 Resending SMS code...');
 
-            const response = await this.tryMultipleEndpoints(
-                '/resend',
+            const response = await this.tryMultipleUrls(
+                this.resendUrls,
                 requestDataForAPI,
                 headers,
                 30000
