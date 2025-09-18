@@ -63,9 +63,9 @@ export class ClickSubsApiService {
     }
 
     private getHeaders() {
-        const timestamp = new Date().toISOString();
+        const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp (10 digits)
         const digest = crypto
-            .createHash('sha256')
+            .createHash('sha1')
             .update(timestamp + this.secretKey)
             .digest('hex');
 
