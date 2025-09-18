@@ -28,14 +28,18 @@ export class ClickSubsApiService {
 
     // Professional Click API endpoints (hozircha faqat rasmiy API bazasi bilan cheklaymiz)
     private readonly cardTokenUrls = [
-        'https://api.click.uz/v2/merchant'
+        // Asosiy rasmiy baza
+        'https://api.click.uz/v2/merchant',
+        // Normalizatsiya test uchun (agar ichki routing slash farq qilsa)
+        'https://api.click.uz/v2/merchant/'
     ];
 
     constructor(private readonly configService: ConfigService) {
-        this.serviceId = this.configService.get<string>('CLICK_SERVICE_ID');
-        this.merchantId = this.configService.get<string>('CLICK_MERCHANT_ID');
-        this.secretKey = this.configService.get<string>('CLICK_SECRET');
-        this.merchantUserId = this.configService.get<string>('CLICK_MERCHANT_USER_ID');
+        this.serviceId = (this.configService.get<string>('CLICK_SERVICE_ID') || '').trim();
+        this.merchantId = (this.configService.get<string>('CLICK_MERCHANT_ID') || '').trim();
+        // secretKey trimming – oxirida \n yoki space bo'lsa digest noto'g'ri bo'ladi
+        this.secretKey = (this.configService.get<string>('CLICK_SECRET') || '').trim();
+        this.merchantUserId = (this.configService.get<string>('CLICK_MERCHANT_USER_ID') || '').trim();
 
         if (!this.serviceId) {
             throw new Error('CLICK_SERVICE_ID environment variable is required');
@@ -61,14 +65,28 @@ export class ClickSubsApiService {
         const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp (10 digits)
         const digest = crypto
             .createHash('sha1')
-            .update(timestamp + this.secretKey)
+            .update(String(timestamp) + this.secretKey)
             .digest('hex');
+
+        // Diagnostika uchun qisqa log (faqat birinchi 6 va oxirgi 4)
+        logger.debug(`[CLICK AUTH] ts=${timestamp} (len=${String(timestamp).length}) digest=${digest.slice(0, 6)}...${digest.slice(-4)} len=${digest.length}`);
+
+        if (String(timestamp).length !== 10) {
+            logger.error('Timestamp 10 xonali emas! Click Auth ishlamaydi.');
+        }
+        if (digest.length !== 40) {
+            logger.error('SHA1 digest uzunligi 40 emas! Secret noto\'g\'ri yoki trim kerak.');
+        }
 
         return {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'Auth': `${this.merchantUserId}:${digest}:${timestamp}`,
         };
+    }
+
+    private buildUrl(base: string, endpoint: string) {
+        return `${base.replace(/\/+$/, '')}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
     }
 
     private async retryWithMultipleUrls<T>(
@@ -81,118 +99,93 @@ export class ClickSubsApiService {
 
         for (let urlIndex = 0; urlIndex < this.cardTokenUrls.length; urlIndex++) {
             const baseUrl = this.cardTokenUrls[urlIndex];
-            const fullUrl = `${baseUrl}${endpoint}`;
+            const fullUrl = this.buildUrl(baseUrl, endpoint);
 
             try {
                 logger.info(`Trying URL ${urlIndex + 1}/${this.cardTokenUrls.length}: ${fullUrl}`);
                 logger.info(`Request data: ${JSON.stringify(requestData)}`);
-                logger.info(`Request headers: ${JSON.stringify(headers)}`);
+                logger.info(`Auth header (masked): ${headers.Auth?.split(':')[0]}:****:${headers.Auth?.split(':')[2]}`);
 
                 const response = await this.retryRequest(async () => {
                     return await axios.post(fullUrl, requestData, {
                         headers,
                         timeout,
+                        maxRedirects: 0, // Redirect bo'lsa darhol ushlaymiz
                         validateStatus: () => true // JSON emas bo'lsa ham ko'rib chiqamiz
                     });
                 }, 1, 800);
 
                 const contentType = response.headers?.['content-type'] || '';
 
-                // URL va javob haqida aniq ma'lumot
+                // Redirect ni aniqlash (302/301) – ko'pincha HTML portalga olib keladi
+                if ([301, 302, 303, 307, 308].includes(response.status)) {
+                    logger.error(`❌ Redirect qaytdi (status=${response.status}). Bu API emas, HTML portalga yo'naltirilmoqda.`);
+                    throw new Error('REDIRECT_RESPONSE');
+                }
+
                 logger.info(`Response Status: ${response.status}`);
                 logger.info(`Response Content-Type: ${contentType}`);
-                logger.info(`Response Data Type: ${typeof response.data}`);
 
                 if (typeof response.data === 'string') {
                     // HTML portal qaytganini aniqlash
+                    const sample = response.data.slice(0, 120).replace(/\n/g, ' ');
                     if (response.data.startsWith('<!DOCTYPE html') || contentType.includes('text/html')) {
-                        logger.error('❌ Click API HTML sahifa qaytardi (Portal/Website o\'rniga API chaqirilmagan)');
-                        logger.error(`   Tekshiring: URL to\'g\'ri ${fullUrl}`);
-                        logger.error('   Sabab: Endpoint faollashtirilmagan yoki noto\'g\'ri URL');
+                        logger.error('❌ Click API HTML sahifa qaytardi (Portal/Website o\'rniga API).');
+                        logger.error(`   HTML first 120 chars: ${sample}`);
                         throw new Error('HTML_RESPONSE');
                     }
                 }
 
-                // JSON bo'lmagan yoki object emas struktura
                 if (contentType && !contentType.includes('application/json') && typeof response.data !== 'object') {
                     logger.error(`❌ Kutilgan JSON emas. Content-Type: ${contentType}`);
-                    logger.error(`   URL: ${fullUrl}`);
                     throw new Error('NON_JSON_RESPONSE');
                 }
 
-                // 404 xatoligini maxsus boshqarish
+                if (response.status === 403) {
+                    logger.error('❌ 403 Forbidden – IP whitelisting yoki ruxsat berilmagan servis');
+                    throw new Error('FORBIDDEN_RESPONSE');
+                }
+
+                if (response.status === 401) {
+                    logger.error('❌ 401 Unauthorized – Auth header yoki secret noto\'g\'ri');
+                    throw new Error('UNAUTHORIZED_RESPONSE');
+                }
+
                 if (response.status === 404 || (response.data && response.data.error_code === -404)) {
-                    logger.error(`❌ Click API 404: Resource not found`);
-                    logger.error(`   URL: ${fullUrl}`);
-                    logger.error(`   Service ID: ${requestData.service_id}`);
-                    logger.error(`   Merchant ID: ${requestData.merchant_id}`);
-                    logger.error('   ⚠️  Bu service_id va merchant_id Click tizimida faollashtirilmagan demakdir');
+                    logger.error(`❌ Click API 404: Resource not found -> ${fullUrl}`);
                     throw new Error('RESOURCE_NOT_FOUND');
                 }
 
                 logger.info(`✅ SUCCESS with URL: ${fullUrl}`);
-                logger.info(`Raw response: ${typeof response.data === 'object' ? JSON.stringify(response.data) : '[non-json]'}`);
+                logger.debug(`Raw response: ${typeof response.data === 'object' ? JSON.stringify(response.data) : '[non-json]'}`);
                 return response;
 
             } catch (error: any) {
                 lastError = error;
 
-                if (error.message === 'HTML_RESPONSE') {
-                    lastError = new Error('❌ Click API JSON o\'rniga HTML portal sahifasini qaytardi.\n   📞 Click support: +998 71 200 09 09\n   📧 support@click.uz\n   ⚠️  card_token servisi yoqilmagan yoki noto\'g\'ri URL');
-                } else if (error.message === 'NON_JSON_RESPONSE') {
-                    lastError = new Error('❌ Click API noto\'g\'ri format qaytardi (JSON emas).\n   🔍 Endpoint aktiv emas yoki tarmoq proxy aralashmoqda');
-                } else if (error.message === 'RESOURCE_NOT_FOUND') {
-                    lastError = new Error('❌ Click API 404: Service topilmadi\n   📋 Service ID: ' + requestData.service_id + '\n   🏪 Merchant ID: ' + requestData.merchant_id + '\n   📞 Click support bilan bog\'laning: +998 71 200 09 09\n   ✅ Service va Merchant kombinatsiyasini faollashtiring');
+                const map: Record<string, string> = {
+                    'HTML_RESPONSE': '❌ Click API JSON o\'rniga HTML portal sahifasini qaytardi. card_token servisi yoqilmagan yoki noto\'g\'ri URL / IP whitelist. Support bilan bog\'laning.',
+                    'NON_JSON_RESPONSE': '❌ Click API noto\'g\'ri format (JSON emas). Endpoint aktiv emas yoki orada proxy HTML qo\'yib yuboryapti.',
+                    'RESOURCE_NOT_FOUND': '❌ 404: Service/Merchant kombinatsiyasi Click tizimida yoqilmagan. Supportdan faollashtiring.',
+                    'REDIRECT_RESPONSE': '❌ Redirect xolati: API emas, HTML portalga yo\'naltirish. IP yoki endpoint faollashtirilmagan.',
+                    'FORBIDDEN_RESPONSE': '❌ 403 Forbidden: IP whitelisting yoqilmagan yoki ruxsat berilmagan servis.',
+                    'UNAUTHORIZED_RESPONSE': '❌ 401 Unauthorized: Auth noto\'g\'ri. merchant_user_id / secret / vaqtni tekshiring.'
+                };
+                if (map[error.message]) {
+                    lastError = new Error(map[error.message]);
                 }
 
                 const status = error?.response?.status;
-                const errorCode = error?.response?.data?.error_code;
-                const errorNote = error?.response?.data?.error_note;
-
-                logger.error(`❌ FAILED with URL ${fullUrl}`);
-                logger.error(`   HTTP Status: ${status}`);
-                logger.error(`   Click Error Code: ${errorCode}`);
-                logger.error(`   Click Error Note: ${errorNote}`);
-
+                logger.error(`❌ FAILED URL ${fullUrl} status=${status} message=${lastError.message}`);
                 if (error?.response?.data && typeof error.response.data !== 'string') {
-                    logger.error(`   Response body: ${JSON.stringify(error.response.data)}`);
-                }
-
-                if (errorCode === -404 || status === 404) {
-                    logger.warn(`🚨 Resource not found: Service/Merchant kombinatsiyasi Click tizimida mavjud emas`);
-                    logger.warn(`   📋 Tekshiring: service_id=${requestData.service_id}, merchant_id=${requestData.merchant_id}`);
+                    logger.error(`   Body: ${JSON.stringify(error.response.data)}`);
                 }
 
                 if (urlIndex < this.cardTokenUrls.length - 1) {
-                    logger.info('⏭️ Next URL...');
+                    logger.info('⏭️ Next base URL bilan urinib ko\'riladi...');
                     continue;
                 }
             }
-        }
-
-        const errorCode = lastError?.response?.data?.error_code;
-        const errorNote = lastError?.response?.data?.error_note;
-
-        if (errorCode === -404 || lastError?.response?.status === 404) {
-            throw new Error(`❌ Click Card Token API 404 xatoligi
-📋 Service ID: ${this.serviceId}
-🏪 Merchant ID: ${this.merchantId}  
-👤 Merchant User ID: ${this.merchantUserId}
-🔑 Secret mavjud: ${this.secretKey ? 'Ha' : 'Yo\'q'}
-
-⚠️  Muammo: Bu Service va Merchant ID kombinatsiyasi Click tizimida ro'yxatdan o'tmagan yoki faollashtirilmagan.
-
-📞 Click support: +998 71 200 09 09
-📧 Email: support@click.uz
-
-🛠️  So'rash kerak:
-1. Service ID ${this.serviceId} va Merchant ID ${this.merchantId} kombinatsiyasini tekshirish
-2. card_token endpoint ni production da yoqish
-3. merchant_user_id ${this.merchantUserId} ni tekshirish`);
-        }
-
-        if (errorCode && errorCode < 0) {
-            throw new Error(`❌ Click API xatoligi: ${errorNote || 'Noma\'lum xatolik'} (kod: ${errorCode})`);
         }
 
         throw lastError;
@@ -202,8 +195,8 @@ export class ClickSubsApiService {
         const headers = this.getHeaders();
 
         interface RequestBody {
-            service_id: string;
-            merchant_id: string;
+            service_id: number;
+            merchant_id: number;
             card_number: string;
             expire_date: string;
             temporary: number;
@@ -217,8 +210,8 @@ export class ClickSubsApiService {
         const sanitizedExpireDate = (requestBody.expire_date || '').replace(/\D/g, '');
 
         const requestBodyWithServiceId: RequestBody = {
-            service_id: this.serviceId,
-            merchant_id: this.merchantId,
+            service_id: Number(this.serviceId),
+            merchant_id: Number(this.merchantId),
             card_number: sanitizedCardNumber,
             expire_date: sanitizedExpireDate,
             temporary: requestBody.temporary ? 1 : 0,
@@ -326,8 +319,8 @@ export class ClickSubsApiService {
         const headers = this.getHeaders();
 
         interface RequestBody {
-            service_id: string;
-            merchant_id: string;
+            service_id: number; // was string -> align with createCardtoken
+            merchant_id: number; // was string -> align with createCardtoken
             card_token: string;
             sms_code: string;
         }
@@ -341,8 +334,8 @@ export class ClickSubsApiService {
         });
 
         const requestBodyWithServiceId: RequestBody = {
-            service_id: this.serviceId,
-            merchant_id: this.merchantId,
+            service_id: Number(this.serviceId),
+            merchant_id: Number(this.merchantId),
             card_token: requestBody.card_token,
             sms_code: String(requestBody.sms_code),
         };
@@ -492,8 +485,8 @@ export class ClickSubsApiService {
         const headers = this.getHeaders();
 
         const payload = {
-            service_id: this.serviceId,
-            merchant_id: this.merchantId,
+            service_id: Number(this.serviceId),
+            merchant_id: Number(this.merchantId),
             card_token: userCard.cardToken,
             amount: plan.price.toString(),
             transaction_parameter: transaction._id.toString(),

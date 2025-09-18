@@ -550,8 +550,9 @@ export class ClickService {
         invoiceData,
         {
           headers: {
-            'Authorization': authHeader,
+            'Auth': authHeader,
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
           timeout: 30000,
         }
@@ -580,7 +581,9 @@ export class ClickService {
         `https://api.click.uz/v2/merchant/invoice/status/${invoiceId}`,
         {
           headers: {
-            'Authorization': authHeader,
+            'Auth': authHeader,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
           },
           timeout: 30000,
         }
