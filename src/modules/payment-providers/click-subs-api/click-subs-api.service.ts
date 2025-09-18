@@ -68,8 +68,6 @@ export class ClickSubsApiService {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'Auth': `${this.merchantUserId}:${digest}:${timestamp}`,
-            'User-Agent': 'BotClic/1.0',
-            'X-Requested-With': 'XMLHttpRequest',
         };
     }
 
