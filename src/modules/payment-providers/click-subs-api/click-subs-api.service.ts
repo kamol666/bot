@@ -99,18 +99,37 @@ export class ClickSubsApiService {
                 }, 1, 800);
 
                 const contentType = response.headers?.['content-type'] || '';
+
+                // URL va javob haqida aniq ma'lumot
+                logger.info(`Response Status: ${response.status}`);
+                logger.info(`Response Content-Type: ${contentType}`);
+                logger.info(`Response Data Type: ${typeof response.data}`);
+
                 if (typeof response.data === 'string') {
                     // HTML portal qaytganini aniqlash
                     if (response.data.startsWith('<!DOCTYPE html') || contentType.includes('text/html')) {
-                        logger.error('Click API HTML sahifa qaytardi. Ehtimol endpoint faollashtirilmagan yoki noto\'g\'ri URL.');
+                        logger.error('❌ Click API HTML sahifa qaytardi (Portal/Website o\'rniga API chaqirilmagan)');
+                        logger.error(`   Tekshiring: URL to\'g\'ri ${fullUrl}`);
+                        logger.error('   Sabab: Endpoint faollashtirilmagan yoki noto\'g\'ri URL');
                         throw new Error('HTML_RESPONSE');
                     }
                 }
 
                 // JSON bo'lmagan yoki object emas struktura
                 if (contentType && !contentType.includes('application/json') && typeof response.data !== 'object') {
-                    logger.error(`Kutilgan JSON emas. Content-Type: ${contentType}`);
+                    logger.error(`❌ Kutilgan JSON emas. Content-Type: ${contentType}`);
+                    logger.error(`   URL: ${fullUrl}`);
                     throw new Error('NON_JSON_RESPONSE');
+                }
+
+                // 404 xatoligini maxsus boshqarish
+                if (response.status === 404 || (response.data && response.data.error_code === -404)) {
+                    logger.error(`❌ Click API 404: Resource not found`);
+                    logger.error(`   URL: ${fullUrl}`);
+                    logger.error(`   Service ID: ${requestData.service_id}`);
+                    logger.error(`   Merchant ID: ${requestData.merchant_id}`);
+                    logger.error('   ⚠️  Bu service_id va merchant_id Click tizimida faollashtirilmagan demakdir');
+                    throw new Error('RESOURCE_NOT_FOUND');
                 }
 
                 logger.info(`✅ SUCCESS with URL: ${fullUrl}`);
@@ -121,9 +140,11 @@ export class ClickSubsApiService {
                 lastError = error;
 
                 if (error.message === 'HTML_RESPONSE') {
-                    lastError = new Error('Click API JSON o\'rniga HTML portal sahifasini qaytardi. card_token servisi yoqilmagan yoki noto\'g\'ri konfiguratsiya. Click support bilan bog\'laning: +998 71 200 09 09');
+                    lastError = new Error('❌ Click API JSON o\'rniga HTML portal sahifasini qaytardi.\n   📞 Click support: +998 71 200 09 09\n   📧 support@click.uz\n   ⚠️  card_token servisi yoqilmagan yoki noto\'g\'ri URL');
                 } else if (error.message === 'NON_JSON_RESPONSE') {
-                    lastError = new Error('Click API noto\'g\'ri format (JSON emas) qaytardi. Endpoint aktiv emas yoki tarmoq proxysi aralashmoqda.');
+                    lastError = new Error('❌ Click API noto\'g\'ri format qaytardi (JSON emas).\n   🔍 Endpoint aktiv emas yoki tarmoq proxy aralashmoqda');
+                } else if (error.message === 'RESOURCE_NOT_FOUND') {
+                    lastError = new Error('❌ Click API 404: Service topilmadi\n   📋 Service ID: ' + requestData.service_id + '\n   🏪 Merchant ID: ' + requestData.merchant_id + '\n   📞 Click support bilan bog\'laning: +998 71 200 09 09\n   ✅ Service va Merchant kombinatsiyasini faollashtiring');
                 }
 
                 const status = error?.response?.status;
@@ -131,14 +152,17 @@ export class ClickSubsApiService {
                 const errorNote = error?.response?.data?.error_note;
 
                 logger.error(`❌ FAILED with URL ${fullUrl}`);
-                logger.error(`Status: ${status}, Error Code: ${errorCode}, Error Note: ${errorNote}`);
+                logger.error(`   HTTP Status: ${status}`);
+                logger.error(`   Click Error Code: ${errorCode}`);
+                logger.error(`   Click Error Note: ${errorNote}`);
 
                 if (error?.response?.data && typeof error.response.data !== 'string') {
-                    logger.error(`Response body: ${JSON.stringify(error.response.data)}`);
+                    logger.error(`   Response body: ${JSON.stringify(error.response.data)}`);
                 }
 
-                if (errorCode === -404) {
-                    logger.warn(`Resource not found at ${fullUrl}. Bu ko'p hollarda servis faollashtirilmaganini bildiradi.`);
+                if (errorCode === -404 || status === 404) {
+                    logger.warn(`🚨 Resource not found: Service/Merchant kombinatsiyasi Click tizimida mavjud emas`);
+                    logger.warn(`   📋 Tekshiring: service_id=${requestData.service_id}, merchant_id=${requestData.merchant_id}`);
                 }
 
                 if (urlIndex < this.cardTokenUrls.length - 1) {
@@ -149,8 +173,28 @@ export class ClickSubsApiService {
         }
 
         const errorCode = lastError?.response?.data?.error_code;
-        if (errorCode === -404) {
-            throw new Error('Click Card Token API topilmadi (-404). Merchant konfiguratsiyasi yoki servis faollashtirilmagan. Click support: +998 71 200 09 09');
+        const errorNote = lastError?.response?.data?.error_note;
+
+        if (errorCode === -404 || lastError?.response?.status === 404) {
+            throw new Error(`❌ Click Card Token API 404 xatoligi
+📋 Service ID: ${this.serviceId}
+🏪 Merchant ID: ${this.merchantId}  
+👤 Merchant User ID: ${this.merchantUserId}
+🔑 Secret mavjud: ${this.secretKey ? 'Ha' : 'Yo\'q'}
+
+⚠️  Muammo: Bu Service va Merchant ID kombinatsiyasi Click tizimida ro'yxatdan o'tmagan yoki faollashtirilmagan.
+
+📞 Click support: +998 71 200 09 09
+📧 Email: support@click.uz
+
+🛠️  So'rash kerak:
+1. Service ID ${this.serviceId} va Merchant ID ${this.merchantId} kombinatsiyasini tekshirish
+2. card_token endpoint ni production da yoqish
+3. merchant_user_id ${this.merchantUserId} ni tekshirish`);
+        }
+
+        if (errorCode && errorCode < 0) {
+            throw new Error(`❌ Click API xatoligi: ${errorNote || 'Noma\'lum xatolik'} (kod: ${errorCode})`);
         }
 
         throw lastError;
@@ -201,24 +245,39 @@ export class ClickSubsApiService {
             if (response.data.error_code !== 0) {
                 const code = response.data.error_code;
                 const note = response.data.error_note || 'Unknown error';
-                logger.error(`Click create card token failed: code=${code}, note=${note}`);
+                logger.error(`❌ Click create card token failed: code=${code}, note=${note}`);
 
+                // Maxsus xatolik xabarlari
                 if (code === -404) {
-                    throw new Error('Click Card Token servisi topilmadi (-404). Click tizimida servis aktiv emas.');
+                    throw new Error(`❌ Click Card Token servisi topilmadi (-404)
+🔍 Sabab: Service ID va Merchant ID kombinatsiyasi noto'g'ri
+📋 Sizning ma'lumotlar:
+   - Service ID: ${this.serviceId}
+   - Merchant ID: ${this.merchantId}
+   - Merchant User ID: ${this.merchantUserId}
+   
+📞 Click support: +998 71 200 09 09 
+📧 support@click.uz
+💡 So'rang: "card_token servisini production da yoqing"`);
                 }
                 if (code === -500) {
-                    throw new Error('Click ichki xatolik (-500). Merchant sozlamalari yoki servis statusini tekshiring.');
+                    throw new Error('❌ Click ichki server xatoligi (-500)\n🔧 Merchant sozlamalari yoki servis statusini tekshiring\n📞 Click support: +998 71 200 09 09');
                 }
                 if (code === -401) {
-                    throw new Error('Auth xatolik (-401). merchant_user_id / secret noto\'g\'ri yoki vaqt notog\'ri.');
+                    throw new Error(`❌ Auth xatoligi (-401)
+🔐 Tekshiring:
+   - merchant_user_id: ${this.merchantUserId}
+   - secret_key to'g'ri ekanligini
+   - server vaqti to'g'ri ekanligini (${new Date().toISOString()})
+📞 Click support: +998 71 200 09 09`);
                 }
                 if (code === -5014) {
-                    throw new Error('Karta raqami noto\'g\'ri yoki qo\'llab-quvvatlanmaydi.');
+                    throw new Error('❌ Karta raqami noto\'g\'ri yoki qo\'llab-quvvatlanmaydi\n💳 To\'g\'ri format: 8600 1234 1234 1234');
                 }
                 if (code === -5019) {
-                    throw new Error('Limitga erishildi. Keyinroq urinib ko\'ring.');
+                    throw new Error('❌ Limitga erishildi\n⏰ Keyinroq urinib ko\'ring (10-15 daqiqadan so\'ng)');
                 }
-                throw new Error(`Click API error: ${note} (kod: ${code})`);
+                throw new Error(`❌ Click API xatoligi: ${note} (kod: ${code})\n📞 Yordam: +998 71 200 09 09`);
             }
 
             const result: CreateCardTokenResponseDto = new CreateCardTokenResponseDto();
