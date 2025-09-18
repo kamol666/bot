@@ -100,7 +100,7 @@ export class ClickService {
     const amount = clickReqBody.amount;
     const transId = clickReqBody.click_trans_id + '';
     const signString = clickReqBody.sign_string;
-    const signTime = new Date(clickReqBody.sign_time).toISOString();
+    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
 
     const myMD5Params = {
       clickTransId: transId,
@@ -167,7 +167,7 @@ export class ClickService {
     const transId = clickReqBody.click_trans_id + '';
     const serviceId = clickReqBody.service_id;
     const amount = clickReqBody.amount;
-    const signTime = clickReqBody.sign_time;
+    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
     const error = clickReqBody.error;
     const signString = clickReqBody.sign_string;
 
@@ -336,7 +336,7 @@ export class ClickService {
     const amount = clickReqBody.amount;
     const transId = clickReqBody.click_trans_id + '';
     const signString = clickReqBody.sign_string;
-    const signTime = new Date(clickReqBody.sign_time).toISOString();
+    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
 
     const myMD5Params = {
       clickTransId: transId,
@@ -402,7 +402,7 @@ export class ClickService {
     const transId = clickReqBody.click_trans_id + '';
     const serviceId = clickReqBody.service_id;
     const amount = clickReqBody.amount;
-    const signTime = clickReqBody.sign_time;
+    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
     const error = clickReqBody.error;
     const signString = clickReqBody.sign_string;
 

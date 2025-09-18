@@ -63,15 +63,17 @@ export class ClickSubsApiService {
 
     // Get proper headers for Click API with authentication
     private getHeaders() {
-        const timestamp = new Date().toISOString();
+        // Use 10-digit UNIX timestamp per Click spec
+        const timestamp = Math.floor(Date.now() / 1000); // number
         const digest = crypto
-            .createHash('sha256')
+            .createHash('sha1') // Click requires sha1(timestamp + secret_key)
             .update(timestamp + this.secretKey)
             .digest('hex');
 
         return {
             'Content-Type': 'application/json',
             Accept: 'application/json',
+            // Format: merchant_user_id:digest:timestamp
             Auth: `${this.merchantUserId}:${digest}:${timestamp}`,
             'User-Agent': 'BotClic/1.0',
             'X-Requested-With': 'XMLHttpRequest',

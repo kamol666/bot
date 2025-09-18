@@ -79,12 +79,12 @@ export class ClickService {
 
     switch (actionType) {
       case ClickAction.Prepare:
-        if (clickReqBody.param3 === 'merchant') {
+        if (clickReqBody.param1 === 'merchant') {
           return this.prepareSubsAPI(clickReqBody);
         }
         return this.prepare(clickReqBody);
       case ClickAction.Complete:
-        if (clickReqBody.param3 === 'merchant') {
+        if (clickReqBody.param1 === 'merchant') {
           return this.completeSubsAPI(clickReqBody);
         }
         return this.complete(clickReqBody);
@@ -103,7 +103,7 @@ export class ClickService {
     const amount = clickReqBody.amount;
     const transId = clickReqBody.click_trans_id + '';
     const signString = clickReqBody.sign_string;
-    const signTime = new Date(clickReqBody.sign_time).toISOString();
+    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
 
     const myMD5Params = {
       clickTransId: transId,
@@ -171,7 +171,7 @@ export class ClickService {
     const transId = clickReqBody.click_trans_id + '';
     const serviceId = clickReqBody.service_id;
     const amount = clickReqBody.amount;
-    const signTime = clickReqBody.sign_time;
+    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
     const error = clickReqBody.error;
     const signString = clickReqBody.sign_string;
 
@@ -345,7 +345,7 @@ export class ClickService {
     const amount = clickReqBody.amount;
     const transId = clickReqBody.click_trans_id + '';
     const signString = clickReqBody.sign_string;
-    const signTime = new Date(clickReqBody.sign_time).toISOString();
+    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
 
     const myMD5Params = {
       clickTransId: transId,
@@ -413,7 +413,7 @@ export class ClickService {
     const transId = clickReqBody.click_trans_id + '';
     const serviceId = clickReqBody.service_id;
     const amount = clickReqBody.amount;
-    const signTime = clickReqBody.sign_time;
+    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
     const error = clickReqBody.error;
     const signString = clickReqBody.sign_string;
 

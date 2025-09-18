@@ -70,7 +70,7 @@ export class ClickSubsApiController {
           success: false,
           error: 'CLICK_API_ERROR',
           message: error.message,
-          timestamp: new Date().toISOString()
+          timestamp: Math.floor(Date.now() / 1000)
         }, HttpStatus.BAD_REQUEST);
       }
 
@@ -80,7 +80,7 @@ export class ClickSubsApiController {
           success: false,
           error: 'VALIDATION_ERROR',
           message: error.message,
-          timestamp: new Date().toISOString()
+          timestamp: Math.floor(Date.now() / 1000)
         }, HttpStatus.UNPROCESSABLE_ENTITY);
       }
 
@@ -89,7 +89,7 @@ export class ClickSubsApiController {
         success: false,
         error: 'INTERNAL_ERROR',
         message: 'Karta token yaratishda noma\'lum xatolik yuz berdi. Keyinroq qayta urinib ko\'ring.',
-        timestamp: new Date().toISOString()
+        timestamp: Math.floor(Date.now() / 1000)
       }, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
@@ -106,7 +106,7 @@ export class ClickSubsApiController {
         success: true,
         message: 'SMS kod qayta yuborildi',
         data: result,
-        timestamp: new Date().toISOString()
+        timestamp: Math.floor(Date.now() / 1000)
       };
 
     } catch (error: any) {
@@ -116,7 +116,7 @@ export class ClickSubsApiController {
         success: false,
         error: 'SMS_RESEND_ERROR',
         message: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: Math.floor(Date.now() / 1000)
       }, HttpStatus.BAD_REQUEST);
     }
   }
@@ -136,7 +136,7 @@ export class ClickSubsApiController {
         success: true,
         message: 'Karta muvaffaqiyatli tasdiqlandi',
         data: result,
-        timestamp: new Date().toISOString()
+        timestamp: Math.floor(Date.now() / 1000)
       };
 
     } catch (error: any) {
@@ -146,7 +146,7 @@ export class ClickSubsApiController {
         success: false,
         error: 'VERIFICATION_ERROR',
         message: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: Math.floor(Date.now() / 1000)
       }, HttpStatus.BAD_REQUEST);
     }
   }
