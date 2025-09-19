@@ -5,6 +5,7 @@ import {
   Transaction,
   TransactionStatus,
   PaymentProvider,
+  PaymentTypes,
 } from "../../../shared/database/models/transactions.model";
 import { ClickAction, ClickError } from "./enums";
 import { UserModel } from "../../../shared/database/models/user.model";
@@ -82,12 +83,12 @@ export class ClickService {
 
     switch (actionType) {
       case ClickAction.Prepare:
-        if (clickReqBody.param1 === 'merchant') {
+        if (clickReqBody.param3 === 'merchant') {
           return this.prepareSubsAPI(clickReqBody);
         }
         return this.prepare(clickReqBody);
       case ClickAction.Complete:
-        if (clickReqBody.param1 === 'merchant') {
+        if (clickReqBody.param3 === 'merchant') {
           return this.completeSubsAPI(clickReqBody);
         }
         return this.complete(clickReqBody);
@@ -105,11 +106,11 @@ export class ClickService {
     const amount = clickReqBody.amount;
     const transId = clickReqBody.click_trans_id + '';
     const signString = clickReqBody.sign_string;
-    const signTime = clickReqBody.sign_time; // keep original sign_time, no toISOString
+    const signTime = new Date(clickReqBody.sign_time).toISOString();
 
     const myMD5Params = {
       clickTransId: transId,
-      paymentType: 'ONETIME',
+      paymentType: PaymentTypes.ONETIME,
       serviceId: clickReqBody.service_id,
       secretKey: this.secretKey,
       merchantTransId: planId,
@@ -145,7 +146,7 @@ export class ClickService {
     const time = new Date().getTime();
     await Transaction.create({
       provider: PaymentProvider.CLICK,
-      paymentType: 'ONETIME',
+      paymentType: PaymentTypes.ONETIME,
       planId,
       userId,
       signTime,
@@ -345,7 +346,7 @@ export class ClickService {
 
     const myMD5Params = {
       clickTransId: transId,
-      paymentType: 'SUBSCRIPTION',
+      paymentType: PaymentTypes.SUBSCRIPTION,
       serviceId: clickReqBody.service_id,
       secretKey: this.secretKey,
       merchantTransId: planId,
@@ -380,7 +381,7 @@ export class ClickService {
     const time = new Date().getTime();
     await Transaction.create({
       provider: PaymentProvider.CLICK,
-      paymentType: 'SUBSCRIPTION',
+      paymentType: PaymentTypes.SUBSCRIPTION,
       planId,
       userId,
       signTime,

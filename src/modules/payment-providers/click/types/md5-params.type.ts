@@ -7,4 +7,5 @@ export type Md5HashParams = {
   amount: number;
   action: number;
   signTime: string;
+  paymentType?: string;  // Optional field for payment type
 };

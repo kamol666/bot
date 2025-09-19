@@ -5,7 +5,8 @@ export type ClickRequest = {
   merchant_user_id?: string;
   merchant_trans_id: string;
   param1?: string;                // ✅ Plan ID uchun
-  param2?: string;                // ✅ Qo'shimcha ma'lumot uchun
+  param2?: string;                // ✅ User ID uchun
+  param3?: string;                // ✅ Subscription type uchun (merchant/regular)
   amount: number;
   action: 0 | 1;
   error: 0 | 1;
