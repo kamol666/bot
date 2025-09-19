@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import axios, { AxiosError } from 'axios';
-import * as crypto from 'crypto';
+import * as crypto from 'crypto-js';
 import { Plan } from 'src/shared/database/models/plans.model';
 import { PaymentProvider, Transaction, TransactionStatus } from 'src/shared/database/models/transactions.model';
 import { CardType, UserCardsModel } from 'src/shared/database/models/user-cards.model';
@@ -62,11 +62,20 @@ export class ClickSubsApiService {
     }
 
     private getHeaders() {
-        const timestamp = Math.floor(Date.now() / 1000); // Unix timestamp (10 digits)
-        const digest = crypto
-            .createHash('sha1')
-            .update(String(timestamp) + this.secretKey)
-            .digest('hex');
+        return this.generateAuthHeader();
+    }
+
+    /**
+     * Generates Click API authentication header using crypto-js
+     * Format: merchant_user_id:digest:timestamp
+     * digest = sha1(timestamp + secret_key)
+     */
+    private generateAuthHeader() {
+        const timestamp = Math.floor(Date.now() / 1000);
+        const digestString = timestamp + this.secretKey;
+        const digest = crypto.SHA1(digestString).toString(crypto.enc.Hex);
+
+        const authHeader = `${this.merchantUserId}:${digest}:${timestamp}`;
 
         // Diagnostika uchun qisqa log (faqat birinchi 6 va oxirgi 4)
         logger.debug(`[CLICK AUTH] ts=${timestamp} (len=${String(timestamp).length}) digest=${digest.slice(0, 6)}...${digest.slice(-4)} len=${digest.length}`);
@@ -78,10 +87,13 @@ export class ClickSubsApiService {
             logger.error('SHA1 digest uzunligi 40 emas! Secret noto\'g\'ri yoki trim kerak.');
         }
 
+        // ✅ Auth header to'g'ri formatda ekanligini tasdiqlash
+        logger.info(`✅ CLICK AUTH HEADER GENERATED: ${authHeader} (UNIX timestamp format)`);
+
         return {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Auth': `${this.merchantUserId}:${digest}:${timestamp}`,
+            'Auth': authHeader,
         };
     }
 
@@ -106,6 +118,18 @@ export class ClickSubsApiService {
                 logger.info(`Request data: ${JSON.stringify(requestData)}`);
                 logger.info(`Auth header (masked): ${headers.Auth?.split(':')[0]}:****:${headers.Auth?.split(':')[2]}`);
 
+                // 📋 FULL REQUEST HEADERS VA BODY LOG
+                logger.info(`📋 REQUEST HEADERS: ${JSON.stringify(headers)}`);
+                logger.info(`📋 REQUEST BODY: ${JSON.stringify(requestData)}`);
+
+                // ❌ ISO timestamp formatini aniqlash
+                const authParts = headers.Auth?.split(':');
+                if (authParts && authParts[2] && authParts[2].includes('T') && authParts[2].includes('Z')) {
+                    logger.error(`❌❌❌ ISO TIMESTAMP ANIQLANDI! Auth header: ${headers.Auth}`);
+                    logger.error(`❌❌❌ Bu xato! UNIX timestamp bo'lishi kerak: ${Math.floor(Date.now() / 1000)}`);
+                    logger.error(`❌❌❌ Stack trace:`, new Error().stack);
+                }
+
                 const response = await this.retryRequest(async () => {
                     return await axios.post(fullUrl, requestData, {
                         headers,
@@ -125,6 +149,10 @@ export class ClickSubsApiService {
 
                 logger.info(`Response Status: ${response.status}`);
                 logger.info(`Response Content-Type: ${contentType}`);
+
+                // 📋 FULL RESPONSE HEADERS VA BODY LOG
+                logger.info(`📋 RESPONSE HEADERS: ${JSON.stringify(response.headers)}`);
+                logger.info(`📋 RESPONSE BODY: ${JSON.stringify(response.data)}`);
 
                 if (typeof response.data === 'string') {
                     // HTML portal qaytganini aniqlash
@@ -633,7 +661,7 @@ export class ClickSubsApiService {
             sign_time,
         } = dto;
         const signString = `${click_trans_id}${service_id}${this.secretKey}${merchant_trans_id}${amount}${action}${sign_time}`;
-        return crypto.createHash('md5').update(signString).digest('hex');
+        return crypto.MD5(signString).toString(crypto.enc.Hex);
     }
 
     async prepareTransaction(dto: ClickPrepareDto) {

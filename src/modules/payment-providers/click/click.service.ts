@@ -66,7 +66,12 @@ export class ClickService {
     const digest = crypto.createHash('sha1').update(digestString).digest('hex');
 
     // Format: merchant_user_id:digest:timestamp
-    return `${this.merchantUserId}:${digest}:${timestamp}`;
+    const authHeader = `${this.merchantUserId}:${digest}:${timestamp}`;
+
+    // ✅ Auth header to'g'ri formatda ekanligini tasdiqlash
+    logger.info(`✅ CLICK AUTH HEADER GENERATED: ${authHeader} (UNIX timestamp format)`);
+
+    return authHeader;
   }
 
   async handleMerchantTransactions(clickReqBody: ClickRequest) {
