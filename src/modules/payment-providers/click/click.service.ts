@@ -532,19 +532,18 @@ export class ClickService {
     planId: string,
   ): Promise<CreateInvoiceResponse> {
     try {
+      const timestamp = Date.now();
+      const merchantTransId = `${userId}_${timestamp}`;
       const invoiceData: CreateInvoiceRequest = {
         service_id: this.serviceId,
         amount: amount,
         phone_number: phoneNumber,
-        merchant_trans_id: userId,  // ✅ User ID (PHP legacy format)
-        param1: planId,             // ✅ Plan ID
-        param2: '',                 // Qo'shimcha ma'lumot (optional)
+        merchant_trans_id: merchantTransId, // Unique ID
+        param1: planId,
+        param2: '',
       };
-
-      logger.info('Creating Click invoice', { invoiceData });
-
+      logger.info('Creating Click invoice', { ...invoiceData, phone_number: phoneNumber.substring(0, 6) + '***' });
       const authHeader = this.generateAuthHeader();
-
       const response = await axios.post(
         'https://api.click.uz/v2/merchant/invoice/create',
         invoiceData,
@@ -557,14 +556,23 @@ export class ClickService {
           timeout: 30000,
         }
       );
-
       logger.info('Click invoice response', { response: response.data });
-
+      if (response.data.error_code !== 0) {
+        logger.error('Click API returned error', {
+          error_code: response.data.error_code,
+          error_note: response.data.error_note,
+          userId,
+        });
+        return {
+          error_code: ClickError.SignFailed,
+          error_note: response.data.error_note,
+        };
+      }
       return response.data;
     } catch (error: any) {
       logger.error('Error creating Click invoice', { error: error.message });
       return {
-        error_code: -1,
+        error_code: ClickError.SignFailed,
         error_note: 'Internal server error',
       };
     }
@@ -576,9 +584,9 @@ export class ClickService {
   async checkInvoiceStatus(invoiceId: number): Promise<InvoiceStatus> {
     try {
       const authHeader = this.generateAuthHeader();
-
+      const url = `https://api.click.uz/v2/merchant/invoice/status/${this.serviceId}/${invoiceId}`;
       const response = await axios.get(
-        `https://api.click.uz/v2/merchant/invoice/status/${invoiceId}`,
+        url,
         {
           headers: {
             'Auth': authHeader,
@@ -588,12 +596,22 @@ export class ClickService {
           timeout: 30000,
         }
       );
-
+      if (response.data.error_code !== 0) {
+        logger.error('Invoice status API returned error', {
+          error_code: response.data.error_code,
+          error_note: response.data.error_note,
+          invoiceId,
+        });
+        return {
+          error_code: ClickError.SignFailed,
+          error_note: response.data.error_note,
+        };
+      }
       return response.data;
     } catch (error: any) {
       logger.error('Error checking invoice status', { error: error.message });
       return {
-        error_code: -1,
+        error_code: ClickError.SignFailed,
         error_note: 'Internal server error',
       };
     }
